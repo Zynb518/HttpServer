@@ -40,7 +40,7 @@ int main()
     try
     {
         // Fixed connection parameters
-        const std::string host = "10.195.145.173";
+        const std::string host = "10.195.153.16";
         const unsigned short port = 10086;
         const std::string target = "/api/login";
         const int version = 11; // HTTP/1.1

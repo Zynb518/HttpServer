@@ -33,6 +33,15 @@
     <ClCompile Include="MysqlConnectionPool.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="StudentHandler.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="InstructorHandler.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="AdminHandler.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="HttpServer.h">
@@ -53,8 +62,14 @@
     <ClInclude Include="MysqlConnectionPool.h">
       <Filter>头文件</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="ClassDiagram.cd" />
+    <ClInclude Include="StudentHandler.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="InstructorHandler.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="AdminHandler.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

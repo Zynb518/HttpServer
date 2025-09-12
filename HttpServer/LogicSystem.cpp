@@ -40,16 +40,3 @@ LogicSystem::~LogicSystem()
 		_worker.join();
 }
 
-void LogicSystem::st_get_personal_info(std::shared_ptr<HttpConnection> con, int id)
-{
-	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res = sess.sql("CALL st_get_personal_info(?)").bind(id).execute();
-	mysqlx::Row row = res.fetchOne();
-	std::string name = row[1].get<std::string>();
-	std::cout << "name is " << name << std::endl;
-	Json::Value root;
-	root["name"] = name;
-	beast::ostream(con->GetResponse().body()) << root.toStyledString();
-	con->GetResponse().prepare_payload();
-	con->StartWrite();
-}

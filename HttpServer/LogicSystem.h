@@ -3,13 +3,12 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
-#include <mysqlx/xdevapi.h>
-#include <boost/beast.hpp>
+#include <functional>
 #include "const.h"
-#include "HttpConnection.h"
-#include <iostream>
+#include "StudentHandler.h"
+#include "InstructorHandler.h"
+#include "AdminHandler.h"
 
-namespace beast = boost::beast;
 // 处理数据库业务
 class LogicSystem
 {
@@ -29,17 +28,7 @@ public:
 	template<typename... Args>
 	void PushToQue(AdminOp op, Args... args);
 
-	void st_get_personal_info	(std::shared_ptr<HttpConnection> con, int id);
-	void st_update_contact_info	(std::shared_ptr<HttpConnection> con, int id, const std::string& phone);
-	void st_update_password		(std::shared_ptr<HttpConnection> con, int id, const std::string& password);
-	void st_browse_courses		(std::shared_ptr<HttpConnection> con, int id);
-	void st_course_details		(std::shared_ptr<HttpConnection> con, int course_id);
-	void st_register_course		(std::shared_ptr<HttpConnection> con, int id, int section_id);
-	void st_withdraw_course		(std::shared_ptr<HttpConnection> con, int id, int section_id);
-	void st_get_schedule		(std::shared_ptr<HttpConnection> con, int id);
-	void st_get_current_grades	(std::shared_ptr<HttpConnection> con, int id, int year); // 根据需求
-	void st_get_transcript		(std::shared_ptr<HttpConnection> con, int id);
-	void st_calculate_gpa		(std::shared_ptr<HttpConnection> con, int id);
+	
 private:
 	LogicSystem();
 	~LogicSystem();
@@ -48,19 +37,23 @@ private:
 	std::condition_variable _conVar;
 	std::mutex _mutex;
 	std::queue<std::function<void()>> _taskQue;
+
+	StudentHandler studentHandler;
+	InstructorHandler instructorHandler;
+	AdminHandler adminHandler;
 };
 
 template<typename ...Args>
 inline void LogicSystem::PushToQue(StudentOp op, Args... args)
 {
-	auto captured_args = std::make_tuple(this, std::forward<Args>(args)...);
+	auto captured_args = std::make_tuple(&studentHandler, std::forward<Args>(args)...);
 	switch (op)
 	{
 	case StudentOp::GET_PERSONAL_INFO:
 	{
 		auto task = [this, captured_args = std::move(captured_args)]() {
 			// 正确调用成员函数
-			std::apply(&LogicSystem::st_get_personal_info, std::move(captured_args));
+			std::apply(&StudentHandler::get_personal_info, std::move(captured_args));
 			};
 		std::lock_guard<std::mutex> lock(_mutex);
 		_taskQue.emplace(std::move(task));

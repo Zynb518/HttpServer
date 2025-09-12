@@ -7,7 +7,7 @@
 // in_addr_any ¶Ë¿Ú10086
 HttpServer::HttpServer(boost::asio::io_context& ioc, uint16_t port)
 	:_ioc(ioc),
-	_acceptor(ioc, tcp::endpoint(boost::asio::ip::make_address("192.168.135.65"), port))
+	_acceptor(ioc, tcp::endpoint(boost::asio::ip::tcp::v4(), port))
 {
 	std::cout << "Server start success, listen on port :" << port << std::endl;
 	_acceptor.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
