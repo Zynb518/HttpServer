@@ -90,65 +90,87 @@ void HttpConnection::ResetTimer()
 void HttpConnection::HandleLogin()
 {
 
-	_response.version(_request.version());
-	_response.keep_alive(_request.keep_alive());
-	_response.set(beast::http::field::content_type, "application/json");
-	_response.set(beast::http::field::access_control_allow_origin, "*");
-	_response.set(beast::http::field::access_control_allow_methods, "GET, POST, OPTIONS");
-	_response.set(beast::http::field::access_control_allow_headers, "Content-Type");
-
-
-	if (_request.method() == beast::http::verb::options) {
-		_response.result(beast::http::status::ok);
-		_response.prepare_payload();
-		beast::http::write(_socket, _response);
-		ReadLogin();
-		return;
-	}
-
-	std::string target = _request.target();
-	if (_request.method() == beast::http::verb::post &&
-		target == "/api/login")
+	try
 	{
+		_response.version(_request.version());
+		_response.keep_alive(_request.keep_alive());
+		_response.set(beast::http::field::content_type, "application/json");
+		_response.set(beast::http::field::access_control_allow_origin, "*");
+		_response.set(beast::http::field::access_control_allow_methods, "GET, POST, OPTIONS");
+		_response.set(beast::http::field::access_control_allow_headers, "Content-Type");
 
-		auto& body = _request.body();
-		auto body_str = beast::buffers_to_string(body.data());
-		if (!ParseUserData(body_str))
-		{
-			// 解析失败
-			std::cout << "ParseUserData error\n";
-			SetBadRequest();
+
+		if (_request.method() == beast::http::verb::options) {
+			_response.result(beast::http::status::ok);
+			_response.prepare_payload();
+			beast::http::write(_socket, _response);
+			ReadLogin();
 			return;
 		}
 
-		_user_id = _recv_root["user_id"].asUInt();
-		_password = _recv_root["password"].asString();
-		_role = _recv_root["role"].asString();
 
-		if (!UserExists(_user_id, _password, _role))
+		// 登陆请求
+		if (_request.method() == beast::http::verb::post &&
+			_request.target() == "/api/login/post")
 		{
-			// 用户不存在
-			std::cout << "User does not exist \n";
-			SetBadRequest();
+
+			auto& body = _request.body();
+			auto body_str = beast::buffers_to_string(body.data());
+
+			Json::Value recv;
+			if (!ParseUserData(body_str, recv))
+			{
+				// 解析失败
+				std::cout << "ParseUserData error\n";
+				SetBadRequest();
+				return;
+			}
+
+			_user_id = stoi(recv["user_id"].asString());
+			_password = recv["password"].asString();
+			_role = recv["role"].asString();
+
+			_role = _role == "teacher" ? "instructor" : _role;
+			_role = _role == "admin" ? "administer" : _role;
+
+			if (!UserExists(_user_id, _password, _role))
+			{
+				// 用户不存在
+				std::cout << "User does not exist \n";
+				SetBadRequest();
+				return;
+			}
+			std::cout << "User exist \n";
+			Json::Value send;
+			_response.result(beast::http::status::ok);
+			send["id"] = _user_id;
+			send["user_id"] = _user_id;
+			send["result"] = true;
+			beast::ostream(_response.body()) << Json::writeString(_writerBuilder, send);
+			WriteLoginSuccess();
 			return;
 		}
-		std::cout << "User exist \n";
-
-		_response.result(beast::http::status::ok);
-
-		_send_root["result"] = "Success";
-		beast::ostream(_response.body()) << _send_root.toStyledString();
-		WriteLoginSuccess();
+		std::cout << "Bad Login Request\n";
+		SetBadRequest(); // 不符合登陆请求格式
+	}
+	catch(const std::exception& e)
+	{
+		std::cout << "HandleLogin Exception is " << e.what() << std::endl;
+		SetBadRequest();
 		return;
 	}
-	std::cout << "Bad Login Request\n";
-	SetBadRequest(); // 不符合登陆请求格式
+
 }
 
-bool HttpConnection::ParseUserData(std::string& body)
+bool HttpConnection::ParseUserData(const std::string& body, Json::Value& recv)
 {
-	bool t = _reader.parse(body, _recv_root);
-	return t;
+	std::unique_ptr<Json::CharReader> jsonReader(_readerBuilder.newCharReader());
+	std::string err;
+	if (!jsonReader->parse(body.c_str(), body.c_str() + body.length(), &recv, &err)) {
+		std::cout << "ParseUserData Error is " << err << std::endl;
+		return false;
+	}
+	return true;
 }
 
 bool HttpConnection::UserExists(uint32_t user_id, const std::string& password, const std::string& role)
@@ -181,9 +203,9 @@ void HttpConnection::SetBadRequest()
 	// 设置状态码
 	_response.result(beast::http::status::bad_request);
 	_response.set(beast::http::field::connection, "close"); // 文件类型
-
-	_send_root["result"] = "Failure";
-	beast::ostream(_response.body()) << _send_root.toStyledString();
+	Json::Value send;
+	send["result"] = false;
+	beast::ostream(_response.body()) << Json::writeString(_writerBuilder, send);
 	WriteBadResponse();
 }
 
@@ -206,7 +228,7 @@ void HttpConnection::WriteBadResponse()
 
 void HttpConnection::WriteLoginSuccess()
 {
-	_response.content_length(_response.body().size());
+	_response.prepare_payload();
 	// 注意time_wait
 	beast::http::write(_socket, _response);
 	
@@ -219,10 +241,7 @@ void HttpConnection::WriteLoginSuccess()
 
 void HttpConnection::StartRead()
 {
-	_recv_root.clear();
-	_send_root.clear();
 	_response.body().clear();
-
 	beast::http::async_read(_socket, _buffer, _request,
 		[self = shared_from_this()](beast::error_code ec, size_t bytes_transferred) {
 			boost::ignore_unused(bytes_transferred);
@@ -244,6 +263,8 @@ void HttpConnection::HandleRead()
 	
 	_response.version(_request.version());
 	_response.keep_alive(_request.keep_alive());
+	std::cout << "target is " << _request.target() << std::endl;
+
 	if (_request.method() == beast::http::verb::options) {
 		_response.result(beast::http::status::ok);
 		_response.prepare_payload();
@@ -253,6 +274,7 @@ void HttpConnection::HandleRead()
 	}
 	if (_role == "student")
 	{
+		std::cout << "Student Request\n";
 		StudentRequest();
 	}
 	else if (_role == "instructor")
@@ -275,23 +297,70 @@ void HttpConnection::StudentRequest()
 	switch (_request.method())
 	{
 	case beast::http::verb::get:
-		if (_request.target() == "/api/get_personal_info")
-		{
-			std::cout << "Post to Que\n";
+	{
+		if (_request.target() == "/api/student_infoCheck")
 			LogicSystem::Instance().PushToQue(StudentOp::GET_PERSONAL_INFO, shared_from_this(), _user_id);
+
+		else if (_request.target() == "/api/student_select/get_all")
+			LogicSystem::Instance().PushToQue(StudentOp::BROWSE_COURSES, shared_from_this(), _user_id);
+
+		else if (_request.target().substr(0, sizeof("/api/student_tableCheck")) == "/api/student_tableCheck")
+		{
+			// semester=2025春
+			LogicSystem::Instance().PushToQue(StudentOp::GET_SCHEDULE, shared_from_this(), _user_id);
 		}
+
+		else if (_request.target() == "/api/student_scoreCheck")
+			LogicSystem::Instance().PushToQue(StudentOp::GET_TRANSCRIPT, shared_from_this(), _user_id);
+
+		else if (_request.target() == "/api/student_scoreCheck/ask_gpa")
+			LogicSystem::Instance().PushToQue(StudentOp::CALCULATE_GPA, shared_from_this(), _user_id);
+
+		else if (_request.target() == "")
+			;
 		break;
+	}
 	case beast::http::verb::post:
-		break;
-	case beast::http::verb::put:
+	{
+		auto jsonReader = std::make_unique<Json::CharReader>(_readerBuilder.newCharReader());
+		std::string err;
+		Json::Value recv;
+		auto& body = _request.body();
+		auto body_str = beast::buffers_to_string(body.data());
+		if (!jsonReader->parse(body_str.c_str(), body_str.c_str() + body_str.length(), &recv, &err)) {
+			std::cout << "ParseUserData Error is " << err << std::endl;
+			SetBadRequest();
+			return;
+		}
+		// 选课
+		if (_request.target() == "/api/student_select/submit")
+		{
+			uint32_t section_id = stoi(recv["section_id"].asString());
+			LogicSystem::Instance().PushToQue(StudentOp::REGISTER_COURSE
+				, shared_from_this(), _user_id, section_id);
+		}
+		// 退课
+		else if (_request.target() == "/api/student_select/cancel")
+		{
+			uint32_t section_id = stoi(recv["section_id"].asString());
+			LogicSystem::Instance().PushToQue(StudentOp::WITHDRAW_COURSE
+				, shared_from_this(), _user_id, section_id);
+		}
+		// 修改个人信息
+		else if (_request.target() == "/api/student_infoCheck/modify")
+		{
+			auto birthday	= recv["birthday"].asString();
+			auto email		= recv["email"].asString();
+			auto phone		= recv["phone"].asString();
+			auto password	= recv["password"].asString();
+
+			LogicSystem::Instance().PushToQue(StudentOp::UPDATE_PERSONAL_INFO
+				, shared_from_this(), _user_id, std::move(birthday), 
+				std::move(email), std::move(phone), std::move(password));
+		}
 
 		break;
-	case beast::http::verb::patch:
-
-		break;
-	case beast::http::verb::delete_:
-
-		break;
+	}
 	default:
 		std::cout << "StudentRequest Wrong, SetBadRequest\n";
 		SetBadRequest();

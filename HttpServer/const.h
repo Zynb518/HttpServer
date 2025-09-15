@@ -2,21 +2,17 @@
 
 enum class StudentOp {
     // 个人信息管理
-    GET_PERSONAL_INFO,          // GET /api/students/me
-    UPDATE_CONTACT_INFO,        // PATCH /api/students/me/contact
-    UPDATE_PASSWORD,            // PUT /api/students/me/password
-
+    GET_PERSONAL_INFO,          // 个人信息
+	UPDATE_PERSONAL_INFO,       // 修改个人信息
     // 课程相关
-    BROWSE_COURSES,             // GET /api/courses
-    GET_COURSE_DETAILS,         // GET /api/courses/{id}
-    REGISTER_COURSE,            // POST /api/students/me/courses
-    WITHDRAW_COURSE,            // DELETE /api/students/me/courses/{id}
+    BROWSE_COURSES,             // 可选课程
+    REGISTER_COURSE,            // 注册课程
+    WITHDRAW_COURSE,            // 退选课程
 
     // 课表与成绩
-    GET_SCHEDULE,               // GET /api/students/me/schedule
-    GET_CURRENT_GRADES,         // GET /api/students/me/grades
-    GET_TRANSCRIPT,             // GET /api/students/me/transcript
-    CALCULATE_GPA               // GET /api/students/me/gpa
+    GET_SCHEDULE,               // 看课表
+    GET_TRANSCRIPT,             // 查询所有成绩
+	CALCULATE_GPA               // 计算GPA
 };
 
 enum class InstructorOp {

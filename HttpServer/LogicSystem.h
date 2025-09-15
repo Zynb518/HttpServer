@@ -52,38 +52,66 @@ inline void LogicSystem::PushToQue(StudentOp op, Args... args)
 	case StudentOp::GET_PERSONAL_INFO:
 	{
 		auto task = [this, captured_args = std::move(captured_args)]() {
-			// 正确调用成员函数
 			std::apply(&StudentHandler::get_personal_info, std::move(captured_args));
 			};
 		std::lock_guard<std::mutex> lock(_mutex);
 		_taskQue.emplace(std::move(task));
 		break;
 	}
-		
-	case StudentOp::UPDATE_CONTACT_INFO:
-		break;
-	case StudentOp::UPDATE_PASSWORD:
-		break;
 
 	// 课程相关
 	case StudentOp::BROWSE_COURSES:
+	{
+		auto task = [this, captured_args = std::move(captured_args)]() {
+			std::apply(&StudentHandler::browse_courses, std::move(captured_args));
+			};
+		std::lock_guard<std::mutex> lock(_mutex);
+		_taskQue.emplace(std::move(task));
 		break;
-	case StudentOp::GET_COURSE_DETAILS:
-		break;
+	}
 	case StudentOp::REGISTER_COURSE:
+	{
+		auto task = [this, captured_args = std::move(captured_args)]() {
+			std::apply(&StudentHandler::register_course, std::move(captured_args));
+			};
+		std::lock_guard<std::mutex> lock(_mutex);
+		_taskQue.emplace(std::move(task));
 		break;
+	}
 	case StudentOp::WITHDRAW_COURSE:
+	{
+		auto task = [this, captured_args = std::move(captured_args)]() {
+			std::apply(&StudentHandler::withdraw_course, std::move(captured_args));
+			};
+		std::lock_guard<std::mutex> lock(_mutex);
+		_taskQue.emplace(std::move(task));
 		break;
-	
+	}
 	// 课表与成绩
 	case StudentOp::GET_SCHEDULE:
+	{
 		break;
+	}
 	case StudentOp::GET_CURRENT_GRADES:
 		break;
 	case StudentOp::GET_TRANSCRIPT:
+	{
+		auto task = [this, captured_args = std::move(captured_args)]() {
+			std::apply(&StudentHandler::get_transcript, std::move(captured_args));
+			};
+		std::lock_guard<std::mutex> lock(_mutex);
+		_taskQue.emplace(std::move(task));
 		break;
+	}
 	case StudentOp::CALCULATE_GPA:
+	{
+		auto task = [this, captured_args = std::move(captured_args)]() {
+			std::apply(&StudentHandler::calculate_gpa, std::move(captured_args));
+			};
+		std::lock_guard<std::mutex> lock(_mutex);
+		_taskQue.emplace(std::move(task));
 		break;
+	}
 	}
 	_conVar.notify_one();
 }

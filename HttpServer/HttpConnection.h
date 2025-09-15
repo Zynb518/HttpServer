@@ -28,7 +28,7 @@ private:
 	void ResetTimer();
 	
 	void HandleLogin(); // 解析request
-	bool ParseUserData(std::string& body); // 解析消息体到recv_root
+	bool ParseUserData(const std::string& body, Json::Value& recv); // 解析消息体到recv_root
 
 	// 用户是否存在
 	bool UserExists(uint32_t user_id, const std::string& password, const std::string& role);
@@ -59,9 +59,9 @@ private:
 	beast::http::response<beast::http::dynamic_body> _response;
 
 	// 解析数据 发送数据
-	Json::Reader _reader;
-	Json::Value _recv_root;
-	Json::Value _send_root;
+	Json::StreamWriterBuilder _writerBuilder;
+	Json::CharReaderBuilder _readerBuilder;
+
 	uint32_t _user_id;
 	std::string _password;
 	std::string _role;

@@ -40,9 +40,9 @@ int main()
     try
     {
         // Fixed connection parameters
-        const std::string host = "10.195.153.16";
+        const std::string host = "10.195.145.99";
         const unsigned short port = 10086;
-        const std::string target = "/api/login";
+        const std::string target = "/api/login/post";
         const int version = 11; // HTTP/1.1
 
         // The io_context is required for all I/O
@@ -58,7 +58,7 @@ int main()
         stream.connect(endpoint);
 
         // Set up the JSON payload
-        std::string const json_body = "{\"user_id\":1,\"password\":\"student1\",\"role\":\"student\"}";
+        std::string const json_body = "{\"user_id\":2,\"password\":\"student2\",\"role\":\"student\"}";
 
         // Set up an HTTP POST request message
         http::request<http::string_body> req{ http::verb::post, target, version };
@@ -86,7 +86,7 @@ int main()
         std::cout << res << std::endl;
 
         // -------------------------------------------TEST2-------------------------------------------
-        http::request<http::string_body> req2{ http::verb::get, "/api/get_personal_info", version };
+        http::request<http::string_body> req2{ http::verb::get, "/api/student_select/get_all", version };
         req2.set(http::field::host, host);
         req2.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         req2.set(http::field::content_type, "application/json");
