@@ -2,7 +2,6 @@
 #include "HttpServer.h"
 #include "MysqlConnectionPool.h"
 #include "LogicSystem.h"
-#include "const.h"
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <iostream>
@@ -264,31 +263,40 @@ void HttpConnection::HandleRead()
 	_response.version(_request.version());
 	_response.keep_alive(_request.keep_alive());
 	std::cout << "target is " << _request.target() << std::endl;
-
-	if (_request.method() == beast::http::verb::options) {
-		_response.result(beast::http::status::ok);
-		_response.prepare_payload();
-		beast::http::write(_socket, _response);
-		StartRead();
+	try
+	{
+		if (_request.method() == beast::http::verb::options) {
+			_response.result(beast::http::status::ok);
+			_response.prepare_payload();
+			beast::http::write(_socket, _response);
+			StartRead();
+			return;
+		}
+		if (_role == "student")
+		{
+			std::cout << "Student Request\n";
+			StudentRequest();
+		}
+		else if (_role == "instructor")
+		{
+			InstructorRequest();
+		}
+		else if (_role == "administor")
+		{
+			AdminRequest();
+		}
+		else
+		{
+			std::cout << "role error" << std::endl;
+		}
+	}
+	catch (std::exception& e)
+	{
+		std::cout << "HandleRead Exception is " << e.what() << std::endl;
+		SetBadRequest();
 		return;
 	}
-	if (_role == "student")
-	{
-		std::cout << "Student Request\n";
-		StudentRequest();
-	}
-	else if (_role == "instructor")
-	{
-		InstructorRequest();
-	}
-	else if (_role == "administor")
-	{
-		AdminRequest();
-	}
-	else
-	{
-		std::cout << "role error" << std::endl;
-	}
+	
 }
 
 void HttpConnection::StudentRequest()
@@ -298,31 +306,50 @@ void HttpConnection::StudentRequest()
 	{
 	case beast::http::verb::get:
 	{
-		if (_request.target() == "/api/student_infoCheck")
-			LogicSystem::Instance().PushToQue(StudentOp::GET_PERSONAL_INFO, shared_from_this(), _user_id);
-
+		// 个人信息
+		if (_request.target() == "/api/student_infoCheck") 
+		{
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this()]() {
+				_studentHandler.get_personal_info(self, _user_id); });
+		}
+		// 可选课程
 		else if (_request.target() == "/api/student_select/get_all")
-			LogicSystem::Instance().PushToQue(StudentOp::BROWSE_COURSES, shared_from_this(), _user_id);
-
+		{
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this()]() {
+				_studentHandler.browse_courses(self, _user_id); });
+		}
+		// 课表
 		else if (_request.target().substr(0, sizeof("/api/student_tableCheck")) == "/api/student_tableCheck")
 		{
 			// semester=2025春
-			LogicSystem::Instance().PushToQue(StudentOp::GET_SCHEDULE, shared_from_this(), _user_id);
+			auto pos = _request.target().find("semester=");
+			if (pos == std::string_view::npos)
+			{
+				SetBadRequest();
+				return;
+			}
+			pos += sizeof("semester=") - 1;
+			std::string_view strv(_request.target().substr(pos));
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), strv]() {
+				_studentHandler.get_schedule(self, _user_id, std::string(strv) ); });
 		}
-
+		// 成绩单
 		else if (_request.target() == "/api/student_scoreCheck")
-			LogicSystem::Instance().PushToQue(StudentOp::GET_TRANSCRIPT, shared_from_this(), _user_id);
-
+		{
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this()]() {
+				_studentHandler.get_transcript(self, _user_id); });
+		}
+		// GPA
 		else if (_request.target() == "/api/student_scoreCheck/ask_gpa")
-			LogicSystem::Instance().PushToQue(StudentOp::CALCULATE_GPA, shared_from_this(), _user_id);
-
-		else if (_request.target() == "")
-			;
+		{
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this()]() {
+				_studentHandler.calculate_gpa(self, _user_id); });
+		}
 		break;
 	}
 	case beast::http::verb::post:
 	{
-		auto jsonReader = std::make_unique<Json::CharReader>(_readerBuilder.newCharReader());
+		std::unique_ptr<Json::CharReader> jsonReader(_readerBuilder.newCharReader());
 		std::string err;
 		Json::Value recv;
 		auto& body = _request.body();
@@ -336,27 +363,27 @@ void HttpConnection::StudentRequest()
 		if (_request.target() == "/api/student_select/submit")
 		{
 			uint32_t section_id = stoi(recv["section_id"].asString());
-			LogicSystem::Instance().PushToQue(StudentOp::REGISTER_COURSE
-				, shared_from_this(), _user_id, section_id);
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), section_id]() {
+				_studentHandler.register_course(self, _user_id, section_id); });
 		}
 		// 退课
 		else if (_request.target() == "/api/student_select/cancel")
 		{
 			uint32_t section_id = stoi(recv["section_id"].asString());
-			LogicSystem::Instance().PushToQue(StudentOp::WITHDRAW_COURSE
-				, shared_from_this(), _user_id, section_id);
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), section_id]() {
+				_studentHandler.withdraw_course(self, _user_id, section_id); });
 		}
 		// 修改个人信息
 		else if (_request.target() == "/api/student_infoCheck/modify")
 		{
-			auto birthday	= recv["birthday"].asString();
-			auto email		= recv["email"].asString();
-			auto phone		= recv["phone"].asString();
-			auto password	= recv["password"].asString();
-
-			LogicSystem::Instance().PushToQue(StudentOp::UPDATE_PERSONAL_INFO
-				, shared_from_this(), _user_id, std::move(birthday), 
-				std::move(email), std::move(phone), std::move(password));
+			LogicSystem::Instance().PushToQue(
+				[this, self = shared_from_this(), recv]() {
+					auto birthday = recv["birthday"].asString();
+					auto email = recv["email"].asString();
+					auto phone = recv["phone"].asString();
+					auto password = recv["password"].asString();
+					_studentHandler.update_personal_info(self, _user_id, birthday, email, phone, password); 
+				});
 		}
 
 		break;
@@ -364,7 +391,6 @@ void HttpConnection::StudentRequest()
 	default:
 		std::cout << "StudentRequest Wrong, SetBadRequest\n";
 		SetBadRequest();
-
 		break;
 	}
 }
@@ -425,22 +451,6 @@ void HttpConnection::AdminRequest()
 		break;
 	}
 }
-
-//void HttpConnection::StartWrite()
-//{
-//	// 不是get请求，可以直接回复
-//	_response.content_length(_response.body().size());
-//	// 注意time_wait
-//	beast::http::async_write(_socket, _response,
-//		[self = shared_from_this()](beast::error_code ec, size_t) {
-//			if (ec)
-//			{
-//				std::cout << "HttpConnection async_write error is " << ec.what() << std::endl;
-//				self->CloseConnection();
-//			}
-//		}
-//	);
-//}
 
 void HttpConnection::CloseConnection()
 {

@@ -7,6 +7,9 @@
 #include <memory>
 #include <mysqlx/xdevapi.h>
 
+#include "StudentHandler.h"
+#include "InstructorHandler.h"
+#include "AdminHandler.h"
 
 namespace beast = boost::beast;
 class HttpServer;
@@ -65,5 +68,10 @@ private:
 	uint32_t _user_id;
 	std::string _password;
 	std::string _role;
+
+	StudentHandler _studentHandler;
+	InstructorHandler _instructorHandler;
+	AdminHandler _adminHandler;
+
 };
 

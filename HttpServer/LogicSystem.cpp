@@ -29,7 +29,7 @@ void LogicSystem::Stop()
 }
 
 LogicSystem::LogicSystem()
-	:_worker([this]() {this->WorkFunc(); })
+	:_worker([this]() { this->WorkFunc(); })
 {
 
 }

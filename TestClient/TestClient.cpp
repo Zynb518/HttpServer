@@ -27,7 +27,7 @@
 #include <string>
 #include <thread>
 #include <vector>
-
+#include <string_view>
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace http = beast::http;           // from <boost/beast/http.hpp>
 namespace net = boost::asio;            // from <boost/asio.hpp>
@@ -39,6 +39,12 @@ int main()
 {
     try
     {
+        std::string str = "/api/student_tabelCheck/ask?semester=2025春";
+        std::string_view strv(str);
+		auto pos = strv.find("semester=");
+		pos += sizeof("semester=") - 1;
+		std::cout << strv.substr(pos) << std::endl;
+
         // Fixed connection parameters
         const std::string host = "10.195.145.99";
         const unsigned short port = 10086;

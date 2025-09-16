@@ -56,9 +56,6 @@
     <ClInclude Include="LogicSystem.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="const.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="MysqlConnectionPool.h">
       <Filter>头文件</Filter>
     </ClInclude>

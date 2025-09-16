@@ -5,7 +5,7 @@
 #include <json/json.h>
 #include <iostream>
 
-void StudentHandler::get_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id)
+void StudentHandler::get_personal_info(std::shared_ptr<HttpConnection> con, int id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_get_personal_info(?)").bind(id).execute();
@@ -29,7 +29,7 @@ void StudentHandler::get_personal_info(std::shared_ptr<HttpConnection> con, uint
 	con->StartWrite();
 }
 
-void StudentHandler::update_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id,
+void StudentHandler::update_personal_info(std::shared_ptr<HttpConnection> con, int id,
 	const std::string& birthday, const std::string& email, const std::string& phone, const std::string& password)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
@@ -44,7 +44,7 @@ void StudentHandler::update_personal_info(std::shared_ptr<HttpConnection> con, u
 	con->StartWrite();
 }
 
-void StudentHandler::browse_courses(std::shared_ptr<HttpConnection> con, uint32_t id)
+void StudentHandler::browse_courses(std::shared_ptr<HttpConnection> con, int id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_browse_courses(?)")
@@ -105,7 +105,7 @@ void StudentHandler::browse_courses(std::shared_ptr<HttpConnection> con, uint32_
 	con->StartWrite();
 }
 
-void StudentHandler::register_course(std::shared_ptr<HttpConnection> con, uint32_t id, uint32_t section_id)
+void StudentHandler::register_course(std::shared_ptr<HttpConnection> con, int id, int section_id)
 {
 	Json::Value root;
 
@@ -132,7 +132,7 @@ void StudentHandler::register_course(std::shared_ptr<HttpConnection> con, uint32
 	con->StartWrite();
 }
 
-void StudentHandler::withdraw_course(std::shared_ptr<HttpConnection> con, uint32_t id, uint32_t section_id)
+void StudentHandler::withdraw_course(std::shared_ptr<HttpConnection> con, int id, int section_id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	sess.sql("CALL st_withdraw_course(?,?)").bind(id).bind(section_id).execute();
@@ -146,7 +146,7 @@ void StudentHandler::withdraw_course(std::shared_ptr<HttpConnection> con, uint32
 	con->StartWrite();
 }
 
-void StudentHandler::get_schedule(std::shared_ptr<HttpConnection> con, uint32_t id, const std::string& semester)
+void StudentHandler::get_schedule(std::shared_ptr<HttpConnection> con, int id, const std::string semester)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_get_schedule(?,?)").bind(id).bind(semester).execute();
@@ -199,7 +199,7 @@ void StudentHandler::get_schedule(std::shared_ptr<HttpConnection> con, uint32_t 
 	con->StartWrite();
 }
 
-void StudentHandler::get_transcript(std::shared_ptr<HttpConnection> con, uint32_t id)
+void StudentHandler::get_transcript(std::shared_ptr<HttpConnection> con, int id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_get_personal_info(?)").bind(id).execute();
@@ -225,7 +225,7 @@ void StudentHandler::get_transcript(std::shared_ptr<HttpConnection> con, uint32_
 	con->StartWrite();
 }
 
-void StudentHandler::calculate_gpa(std::shared_ptr<HttpConnection> con, uint32_t id)
+void StudentHandler::calculate_gpa(std::shared_ptr<HttpConnection> con, int id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_calculate_gpa(?)").bind(id).execute();

@@ -110,7 +110,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -151,7 +151,6 @@
     <ClInclude Include="HttpServer.h" />
     <ClInclude Include="InstructorHandler.h" />
     <ClInclude Include="IOServicePool.h" />
-    <ClInclude Include="const.h" />
     <ClInclude Include="LogicSystem.h" />
     <ClInclude Include="MysqlConnectionPool.h" />
     <ClInclude Include="StudentHandler.h" />
