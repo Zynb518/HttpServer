@@ -39,9 +39,17 @@ int main()
 {
     try
     {
-        std::string str = "/api/student_tabelCheck/ask?semester=2025春";
+        std::string str = "?semester=2025春";
         std::string_view strv(str);
+        auto temp = strv.substr(0, 9);
+        if(temp == "?semester")
+        {
+			std::cout << "equal\n";
+        }
 		auto pos = strv.find("semester=");
+		std::cout << "pos = " << pos << std::endl;
+        std::cout << sizeof("semester=") << std::endl;
+
 		pos += sizeof("semester=") - 1;
 		std::cout << strv.substr(pos) << std::endl;
 

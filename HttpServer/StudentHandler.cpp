@@ -5,7 +5,7 @@
 #include <json/json.h>
 #include <iostream>
 
-void StudentHandler::get_personal_info(std::shared_ptr<HttpConnection> con, int id)
+void StudentHandler::get_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_get_personal_info(?)").bind(id).execute();
@@ -29,7 +29,7 @@ void StudentHandler::get_personal_info(std::shared_ptr<HttpConnection> con, int 
 	con->StartWrite();
 }
 
-void StudentHandler::update_personal_info(std::shared_ptr<HttpConnection> con, int id,
+void StudentHandler::update_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id,
 	const std::string& birthday, const std::string& email, const std::string& phone, const std::string& password)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
@@ -44,7 +44,7 @@ void StudentHandler::update_personal_info(std::shared_ptr<HttpConnection> con, i
 	con->StartWrite();
 }
 
-void StudentHandler::browse_courses(std::shared_ptr<HttpConnection> con, int id)
+void StudentHandler::browse_courses(std::shared_ptr<HttpConnection> con, uint32_t id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_browse_courses(?)")
@@ -63,31 +63,8 @@ void StudentHandler::browse_courses(std::shared_ptr<HttpConnection> con, int id)
 		obj["teacher"]		= row[3].get<std::string>();
 
 		auto str = row[4].get<std::string>(); // 时间
-		std::string_view str_v(str);
 		Json::Value timeArr;
-		do
-		{
-			Json::Value timeObj;
-			auto c = str_v.find(" ");
-			std::string_view day(str_v.data(), c);
-			timeObj["day"] = std::string(day);
-			str_v = str_v.substr(c + 1);
-
-			c = str_v.find(",");
-			if(c != std::string_view::npos) // 后面还有时间
-			{
-				std::string_view time(str_v.data(), c);
-				timeObj["time"] = std::string(time);
-				str_v = str_v.substr(c + 1);
-			}
-			else
-			{
-				timeObj["time"] = std::string(str_v);
-				str_v = str_v.substr(str_v.size());
-			}
-			timeArr.append(timeObj);
-		} while (str_v.size() > 0);
-
+		ParseTimeString(str, timeArr);
 		obj["schedule"]		= timeArr;
 		obj["credit"]		= row[5].get<double>();
 		obj["semester"]		= row[6].get<std::string>();
@@ -105,7 +82,7 @@ void StudentHandler::browse_courses(std::shared_ptr<HttpConnection> con, int id)
 	con->StartWrite();
 }
 
-void StudentHandler::register_course(std::shared_ptr<HttpConnection> con, int id, int section_id)
+void StudentHandler::register_course(std::shared_ptr<HttpConnection> con, uint32_t id, uint32_t section_id)
 {
 	Json::Value root;
 
@@ -132,7 +109,7 @@ void StudentHandler::register_course(std::shared_ptr<HttpConnection> con, int id
 	con->StartWrite();
 }
 
-void StudentHandler::withdraw_course(std::shared_ptr<HttpConnection> con, int id, int section_id)
+void StudentHandler::withdraw_course(std::shared_ptr<HttpConnection> con, uint32_t id, uint32_t section_id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	sess.sql("CALL st_withdraw_course(?,?)").bind(id).bind(section_id).execute();
@@ -146,7 +123,7 @@ void StudentHandler::withdraw_course(std::shared_ptr<HttpConnection> con, int id
 	con->StartWrite();
 }
 
-void StudentHandler::get_schedule(std::shared_ptr<HttpConnection> con, int id, const std::string semester)
+void StudentHandler::get_schedule(std::shared_ptr<HttpConnection> con, uint32_t id, const std::string semester)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_get_schedule(?,?)").bind(id).bind(semester).execute();
@@ -163,28 +140,7 @@ void StudentHandler::get_schedule(std::shared_ptr<HttpConnection> con, int id, c
 		obj["location"]		= row[2].get<std::string>();
 		Json::Value timeArr;
 		auto str = row[3].get<std::string>();
-		std::string_view str_v(str);
-		do
-		{
-			Json::Value timeObj;
-			auto c = str_v.find(" ");
-			std::string_view day(str_v.data(), c);
-			timeObj["day"] = std::string(day);
-			str_v = str_v.substr(c + 1);
-			c = str_v.find(",");
-			if (c != std::string_view::npos) // 后面还有时间
-			{
-				std::string_view time(str_v.data(), c);
-				timeObj["time"] = std::string(time);
-				str_v = str_v.substr(c + 1);
-			}
-			else
-			{
-				timeObj["time"] = std::string(str_v);
-				str_v = str_v.substr(str_v.size());
-			}
-			timeArr.append(timeObj);
-		} while (str_v.size() > 0);
+		ParseTimeString(str, timeArr);
 		obj["schedule"]		= timeArr;
 		obj["credit"]		= row[4].get<double>();
 		obj["startWeek"]	= row[5].get<uint32_t>();
@@ -199,7 +155,7 @@ void StudentHandler::get_schedule(std::shared_ptr<HttpConnection> con, int id, c
 	con->StartWrite();
 }
 
-void StudentHandler::get_transcript(std::shared_ptr<HttpConnection> con, int id)
+void StudentHandler::get_transcript(std::shared_ptr<HttpConnection> con, uint32_t id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_get_personal_info(?)").bind(id).execute();
@@ -225,7 +181,7 @@ void StudentHandler::get_transcript(std::shared_ptr<HttpConnection> con, int id)
 	con->StartWrite();
 }
 
-void StudentHandler::calculate_gpa(std::shared_ptr<HttpConnection> con, int id)
+void StudentHandler::calculate_gpa(std::shared_ptr<HttpConnection> con, uint32_t id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_calculate_gpa(?)").bind(id).execute();
@@ -238,4 +194,30 @@ void StudentHandler::calculate_gpa(std::shared_ptr<HttpConnection> con, int id)
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
 	con->GetResponse().prepare_payload();
 	con->StartWrite();
+}
+
+void StudentHandler::ParseTimeString(std::string_view str_v, Json::Value& timeArr)
+{
+	do
+	{
+		Json::Value timeObj; // 一个 day-time 对
+
+		auto c = str_v.find(" ");
+		std::string_view day(str_v.data(), c);
+		timeObj["day"] = std::string(day);
+		str_v = str_v.substr(c + 1);
+		c = str_v.find(",");
+		if (c != std::string_view::npos) // 后面还有时间
+		{
+			std::string_view time(str_v.data(), c);
+			timeObj["time"] = std::string(time);
+			str_v = str_v.substr(c + 1);
+		}
+		else
+		{
+			timeObj["time"] = std::string(str_v);
+			str_v = str_v.substr(str_v.size());
+		}
+		timeArr.append(timeObj);
+	} while (str_v.size() > 0);
 }

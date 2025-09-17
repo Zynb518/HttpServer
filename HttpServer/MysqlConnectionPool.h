@@ -1,6 +1,6 @@
 #pragma once
 #include <mysqlx/xdevapi.h>
-
+#include <mutex>
 class MysqlConnectionPool
 {
 public:
@@ -10,6 +10,7 @@ public:
 	mysqlx::Session GetSession();
 private:
 	MysqlConnectionPool();
+	std::mutex _mutex;
 	mysqlx::Client ConnectionPool;
 };
 

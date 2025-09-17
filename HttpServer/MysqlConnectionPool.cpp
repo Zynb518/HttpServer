@@ -14,5 +14,6 @@ MysqlConnectionPool& MysqlConnectionPool::Instance()
 
 mysqlx::Session MysqlConnectionPool::GetSession()
 {
+	std::lock_guard<std::mutex> lock(_mutex);
 	return ConnectionPool.getSession();
 }

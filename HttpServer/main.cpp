@@ -12,12 +12,6 @@ int main()
 #ifdef _WIN32
         system("chcp 65001 > nul");
 #endif
-        auto sess = MysqlConnectionPool::Instance().GetSession();
-        mysqlx::Table seme = sess.getSchema("scut_sims").getTable("semesters");
-        auto res = seme.select("name").where("semester_id = 1").execute();
-        auto row = res.fetchOne()[0].get<std::string>();
-        std::cout << row << std::endl;
-
         boost::asio::io_context ioc;
         HttpServer server(ioc, 10086);
         ioc.run();

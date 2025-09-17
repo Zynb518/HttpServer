@@ -349,16 +349,17 @@ void HttpConnection::StudentRequest()
 	}
 	case beast::http::verb::post:
 	{
-		std::unique_ptr<Json::CharReader> jsonReader(_readerBuilder.newCharReader());
-		std::string err;
 		Json::Value recv;
 		auto& body = _request.body();
 		auto body_str = beast::buffers_to_string(body.data());
-		if (!jsonReader->parse(body_str.c_str(), body_str.c_str() + body_str.length(), &recv, &err)) {
-			std::cout << "ParseUserData Error is " << err << std::endl;
+		if (!ParseUserData(body_str, recv))
+		{
+			// 解析失败
+			std::cout << "ParseUserData error\n";
 			SetBadRequest();
 			return;
 		}
+
 		// 选课
 		if (_request.target() == "/api/student_select/submit")
 		{
@@ -400,25 +401,82 @@ void HttpConnection::InstructorRequest()
 	switch (_request.method())
 	{
 	case beast::http::verb::get:
-		_response.result(beast::http::status::ok);
-		_response.set(beast::http::field::server, "Beast");
-		// create_response();
+	{
+		// 查课表
+		if (_request.target().substr(0, sizeof("/api/teacher_tableCheck/ask?") ) 
+			== "/api/teacher_tableCheck/ask?") //semester=2025春
+		{
+			auto pos = _request.target().find("semester=");
+			if (pos == std::string_view::npos)
+			{
+				SetBadRequest();
+				return;
+			}
+			pos += sizeof("semester=") - 1;
+			std::string_view strv(_request.target().substr(pos));
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), strv]() {
+				_instructorHandler.get_teaching_sections(self, _user_id, std::string(strv)); });
+		}
+		// 查学生名单
+		else if (_request.target() == "/api/teacher_scoreIn/ask?section_id=512")
+		{
+			auto pos = _request.target().find("section_id=");
+			if (pos == std::string_view::npos)
+			{
+				SetBadRequest();
+				return;
+			}
+			pos += sizeof("section_id=") - 1;
+			std::string_view strv(_request.target().substr(pos));
+			uint32_t section_id = stoi(std::string(strv));
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), section_id]() {
+				_instructorHandler.get_section_students(self, section_id); });
+		}
+		// 查个人信息
+		else if (_request.target() == "/api/teacher_infoCheck/ask")
+		{
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this()]() {
+				_instructorHandler.get_personal_info(self, _user_id); });
+		}
 		break;
+	}
 	case beast::http::verb::post:
-		_response.result(beast::http::status::ok);
-		_response.set(beast::http::field::server, "Beast");
-		// create_post_response();
-		break;
-	case beast::http::verb::put:
+	{
+		Json::Value recv;
+		auto& body = _request.body();
+		auto body_str = beast::buffers_to_string(body.data());
+		if (!ParseUserData(body_str, recv))
+		{
+			// 解析失败
+			std::cout << "ParseUserData error\n";
+			SetBadRequest();
+			return;
+		}
 
+		if(_request.target() == "/api/teacher_scoreIn/enter")
+		{
+			uint32_t student_id = stoi(recv["student_id"].asString());
+			uint32_t section_id = stoi(recv["section_id"].asString());
+			uint32_t score = stoi(recv["score"].asString());
+			LogicSystem::Instance().PushToQue([ = , this, self = shared_from_this()]() {
+				_instructorHandler.post_grades(self, student_id, section_id, score); });
+		} 
+		else if (_request.target() == "/api/teacher_infoCheck/submit")
+		{
+			LogicSystem::Instance().PushToQue(
+				[this, self = shared_from_this(), recv]() {
+					auto college	= recv["college"].asString();
+					auto email		= recv["email"].asString();
+					auto phone		= recv["phone"].asString();
+					auto password	= recv["password"].asString();
+					_instructorHandler.update_personal_info(self, _user_id, college, email, phone, password);
+				});
+		}
 		break;
-	case beast::http::verb::patch:
-
-		break;
+	}
 	default:
 		// 设置状态码
 		SetBadRequest();
-
 		break;
 	}
 }
