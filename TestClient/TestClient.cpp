@@ -41,7 +41,7 @@ int main()
     {
         std::string str = "?semester=2025春";
         std::string_view strv(str);
-        auto temp = strv.substr(0, 9);
+        auto temp = strv.substr(0, sizeof("?semester") - 1);
         if(temp == "?semester")
         {
 			std::cout << "equal\n";

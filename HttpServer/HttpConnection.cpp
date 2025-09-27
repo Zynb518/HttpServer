@@ -319,7 +319,7 @@ void HttpConnection::StudentRequest()
 				_studentHandler.browse_courses(self, _user_id); });
 		}
 		// 课表
-		else if (_request.target().substr(0, sizeof("/api/student_tableCheck")) == "/api/student_tableCheck")
+		else if (_request.target().substr(0, sizeof("/api/student_tableCheck") - 1 ) == "/api/student_tableCheck")
 		{
 			// semester=2025春
 			auto pos = _request.target().find("semester=");
@@ -403,7 +403,7 @@ void HttpConnection::InstructorRequest()
 	case beast::http::verb::get:
 	{
 		// 查课表
-		if (_request.target().substr(0, sizeof("/api/teacher_tableCheck/ask?") ) 
+		if (_request.target().substr(0, sizeof("/api/teacher_tableCheck/ask?") - 1) 
 			== "/api/teacher_tableCheck/ask?") //semester=2025春
 		{
 			auto pos = _request.target().find("semester=");
@@ -418,7 +418,8 @@ void HttpConnection::InstructorRequest()
 				_instructorHandler.get_teaching_sections(self, _user_id, std::string(strv)); });
 		}
 		// 查学生名单
-		else if (_request.target() == "/api/teacher_scoreIn/ask?section_id=512")
+		else if (_request.target().substr(0, sizeof("/api/teacher_scoreIn/ask?") - 1) 
+			== "/api/teacher_scoreIn/ask?")
 		{
 			auto pos = _request.target().find("section_id=");
 			if (pos == std::string_view::npos)
@@ -486,24 +487,33 @@ void HttpConnection::AdminRequest()
 	switch (_request.method())
 	{
 	case beast::http::verb::get:
-		_response.result(beast::http::status::ok);
-		_response.set(beast::http::field::server, "Beast");
-		// create_response();
+	{
+		// 1.获得某种角色的所有账号信息
+		if (_request.target().
+			substr(0, sizeof("/api/admin_accountManage/getInfo?role=") - 1) ==
+			"/api/admin_accountManage/getInfo?role=")
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this()]()
+				{
+					constexpr size_t len = sizeof("/api/admin_accountManage/getInfo?role=") - 1;
+					std::string_view strv(_request.target().substr(len));
+					if (strv == "student");
+					else if (strv == "teacher");
+					else
+						SetBadRequest();
+				});
+		else if (1);
 		break;
+	}
 	case beast::http::verb::post:
-		_response.result(beast::http::status::ok);
-		_response.set(beast::http::field::server, "Beast");
-		// create_post_response();
-		break;
-	case beast::http::verb::put:
+	{
 
 		break;
-	case beast::http::verb::patch:
-
-		break;
+	}
 	case beast::http::verb::delete_:
+	{
 
 		break;
+	}
 	default:
 		SetBadRequest();
 		break;
