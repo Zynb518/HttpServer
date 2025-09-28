@@ -16,7 +16,8 @@ public:
 
 	void get_instructors_info(std::shared_ptr<HttpConnection> con);
 
-	void del_someone(std::shared_ptr<HttpConnection> con, std::vector<uint32_t>&& user_id, std::vector<StringRef>&& role);
+	void del_someone(std::shared_ptr<HttpConnection> con, const std::vector<uint32_t>& user_id,
+		const std::vector<std::string>& role);
 
 	void add_student(std::shared_ptr<HttpConnection> con, StringRef name,
 		StringRef gender, uint32_t grade, StringRef major, uint32_t college_id);
@@ -26,7 +27,7 @@ public:
 
 	void get_sections(std::shared_ptr<HttpConnection> con, StringRef semester);
 
-	void del_section(std::shared_ptr<HttpConnection> con, std::vector<uint32_t>&& section_id);
+	void del_section(std::shared_ptr<HttpConnection> con, const std::vector<uint32_t>& section_id);
 
 	void add_section_new(std::shared_ptr<HttpConnection> con, uint32_t college_id,
 		StringRef course_name, uint32_t credit, StringRef type, StringRef semester,
@@ -44,9 +45,9 @@ public:
 
 	void view_grade_statistics(std::shared_ptr<HttpConnection> con, uint32_t section_id);
 
-	void get_student_grades(std::shared_ptr<HttpConnection> con, uint32_t student_id);
+	void get_student_grades(std::shared_ptr<HttpConnection> con, uint32_t student_id, StringRef semester);
 
-	void get_instructor_grades(std::shared_ptr<HttpConnection> con, uint32_t instructor_id);
+	void get_instructor_grades(std::shared_ptr<HttpConnection> con, uint32_t instructor_id, StringRef semester);
 
 	void get_colleges(std::shared_ptr<HttpConnection> con);
 

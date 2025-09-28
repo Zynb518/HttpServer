@@ -329,9 +329,9 @@ void HttpConnection::StudentRequest()
 				return;
 			}
 			pos += sizeof("semester=") - 1;
-			std::string_view strv(_request.target().substr(pos));
-			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), strv]() {
-				_studentHandler.get_schedule(self, _user_id, std::string(strv) ); });
+			std::string str(_request.target().substr(pos));
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), str = std::move(str)]() {
+				_studentHandler.get_schedule(self, _user_id, str); });
 		}
 		// 成绩单
 		else if (_request.target() == "/api/student_scoreCheck")
@@ -413,9 +413,9 @@ void HttpConnection::InstructorRequest()
 				return;
 			}
 			pos += sizeof("semester=") - 1;
-			std::string_view strv(_request.target().substr(pos));
-			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), strv]() {
-				_instructorHandler.get_teaching_sections(self, _user_id, std::string(strv)); });
+			std::string str(_request.target().substr(pos));
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), str = std::move(str)]() {
+				_instructorHandler.get_teaching_sections(self, _user_id, str); });
 		}
 		// 查学生名单
 		else if (_request.target().substr(0, sizeof("/api/teacher_scoreIn/ask?") - 1) 
@@ -484,34 +484,166 @@ void HttpConnection::InstructorRequest()
 
 void HttpConnection::AdminRequest()
 {
+	auto target = _request.target();
+
 	switch (_request.method())
 	{
 	case beast::http::verb::get:
 	{
 		// 1.获得某种角色的所有账号信息
-		if (_request.target().
-			substr(0, sizeof("/api/admin_accountManage/getInfo?role=") - 1) ==
-			"/api/admin_accountManage/getInfo?role=")
+		if (target.substr(0, sizeof("/api/admin_accountManage/getInfo?role=") - 1) ==
+				"/api/admin_accountManage/getInfo?role=")
+		{
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this()]()
 				{
 					constexpr size_t len = sizeof("/api/admin_accountManage/getInfo?role=") - 1;
-					std::string_view strv(_request.target().substr(len));
-					if (strv == "student");
-					else if (strv == "teacher");
+					std::string str(_request.target().substr(len));
+					if (str == "student")
+						_adminHandler.get_students_info(self);
+					else if (str == "teacher")
+						_adminHandler.get_instructors_info(self);
 					else
 						SetBadRequest();
 				});
-		else if (1);
+		}
+		// 4.获取某学期的所有课程
+		else if(target.substr(0, sizeof("/api/admin_courseManage/getAllCourse?semester=") - 1) == 
+			"/api/admin_courseManage/getAllCourse?semester=")
+		{
+			constexpr size_t len = sizeof("/api/admin_courseManage/getAllCourse?semester=") - 1;
+			std::string semester(target.substr(len));
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), seme = std::move(semester)]()
+				{
+					_adminHandler.get_sections(self, seme);
+				});
+		}
+
+		else 
+			SetBadRequest();
+
 		break;
 	}
 	case beast::http::verb::post:
 	{
+		Json::Value recv;
+		auto& body = _request.body();
+		auto body_str = beast::buffers_to_string(body.data());
+		if (!ParseUserData(body_str, recv))
+		{
+			// 解析失败
+			std::cout << "ParseUserData error\n";
+			SetBadRequest();
+			return;
+		}
+
+		// 2.删除某些账号
+		if (target == "/api/admin_accountManage/deleteInfo")
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), recv]()
+				{
+
+					std::vector<uint32_t> user_id;
+					std::vector<std::string> role;
+					Json::Value deleteInfo = recv["deleteInfo"];
+					for (const auto& item : deleteInfo)
+					{
+						user_id.push_back(stoi(item["user_id"].asString()));
+						role.push_back(item["role"].asString());
+					}
+					_adminHandler.del_someone(self, user_id, role);
+				});
+		// 3. 增加某个账号
+		else if (target == "/api/admin_accountManage/new")
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), recv]()
+				{
+					auto role = recv["role"].asString();
+					if (role == "student")
+					{
+						_adminHandler.add_student(self,
+							recv["name"].asString(),
+							recv["gender"].asString(),
+							recv["grade"].asUInt(),
+							recv["major"].asString(),
+							recv["college_id"].asUInt());
+					}
+					else if (role == "teacher")
+					{
+						_adminHandler.add_instructor(self,
+							recv["name"].asString(),
+							stoi(recv["college_id"].asString()));
+					}
+					else
+						SetBadRequest();
+				});
+		else if (target == "/api/admin_courseManage/newCourse")
+		{
+			Json::Value courseData = recv["courseData"];
+			if (courseData["course_id"].asString().length() == 0) // 新课程
+			{
+				LogicSystem::Instance().PushToQue([this, self = shared_from_this(), courseData]()
+					{
+						_adminHandler.add_section_new(self,
+							courseData["college_id"].asUInt(),
+							courseData["course_name"].asString(),
+							courseData["credit"].asUInt(),
+							courseData["type"].asString(),
+							courseData["semester"].asString(),
+							courseData["teacher_id"].asUInt(),
+							courseData["schedule"].asString(),
+							courseData["max_capacity"].asUInt(),
+							courseData["startWeek"].asUInt(),
+							courseData["endWeek"].asUInt(),
+							courseData["location"].asString());
+					});
+			}
+			else
+			{
+				LogicSystem::Instance().PushToQue([this, self = shared_from_this(), courseData]()
+					{
+						_adminHandler.add_section_old(self,
+							courseData["course_id"].asUInt(),
+							courseData["semester"].asString(),
+							courseData["teacher_id"].asUInt(),
+							courseData["schedule"].asString(),
+							courseData["max_capacity"].asUInt(),
+							courseData["startWeek"].asUInt(),
+							courseData["endWeek"].asUInt(),
+							courseData["location"].asString());
+					});
+			}
+		}
+		else
+			SetBadRequest();
 
 		break;
 	}
 	case beast::http::verb::delete_:
 	{
-
+		Json::Value recv;
+		auto& body = _request.body();
+		auto body_str = beast::buffers_to_string(body.data());
+		if (!ParseUserData(body_str, recv))
+		{
+			// 解析失败
+			std::cout << "ParseUserData error\n";
+			SetBadRequest();
+			return;
+		}
+		// 5.删除某些课程/api/admin_courseManage/deleteCourse
+		if (target == "/api/admin_courseManage/deleteCourse")
+		{
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), recv]()
+				{
+					std::vector<uint32_t> section_id;
+					Json::Value section = recv["section_id"];
+					for (const auto& item : section)
+					{
+						section_id.push_back(stoi(item["section_id"].asString()));
+					}
+					_adminHandler.del_section(self, section_id);
+				});
+		}
+		else
+			SetBadRequest();
 		break;
 	}
 	default:
