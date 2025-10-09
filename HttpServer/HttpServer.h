@@ -14,8 +14,8 @@ class HttpServer
 {
 	using tcp = boost::asio::ip::tcp;
 public:
-	HttpServer(boost::asio::io_context& ioc, uint16_t port);
-	void ClearConnection(std::string_view uuid);
+	HttpServer(boost::asio::io_context& ioc, uint16_t port) noexcept;
+	void ClearConnection(std::string_view uuid) noexcept;
 	~HttpServer();
 private:
 	void StartAccept(); // lambda »Øµ÷ HandleAccept

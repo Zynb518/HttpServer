@@ -1,9 +1,11 @@
+#include <json/json.h>
+#include <iostream>
 #include "StudentHandler.h"
 #include <mysqlx/xdevapi.h>
 #include "MysqlConnectionPool.h"
 #include "HttpConnection.h"
-#include <json/json.h>
-#include <iostream>
+#include "Log.h"
+#include "Tools.h"
 
 void StudentHandler::get_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id)
 {
@@ -30,14 +32,16 @@ void StudentHandler::get_personal_info(std::shared_ptr<HttpConnection> con, uint
 }
 
 void StudentHandler::update_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id,
-	const std::string& birthday, const std::string& email, const std::string& phone, const std::string& password)
+	StringRef birthday, StringRef email, StringRef phone, StringRef password)
 {
+	Json::Value root;
+
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	sess.sql("CALL st_update_personal_info(?,?,?,?,?)")
 		.bind(id).bind(birthday).bind(email).bind(phone).bind(password)
 		.execute();
 	sess.close();
-	Json::Value root;
+	
 	root["result"] = true;
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
 	con->GetResponse().prepare_payload();
@@ -71,7 +75,7 @@ void StudentHandler::browse_courses(std::shared_ptr<HttpConnection> con, uint32_
 		obj["startWeek"]	= row[7].get<uint32_t>();
 		obj["endWeek"]		= row[8].get<uint32_t>();
 		obj["location"]		= row[9].get<std::string>();
-		obj["selected"]		= false;
+		obj["selected"]		= row[10].get<bool>();
 		arr.append(obj);
 	}
 	root["result"] = true;
@@ -85,29 +89,20 @@ void StudentHandler::browse_courses(std::shared_ptr<HttpConnection> con, uint32_
 void StudentHandler::register_course(std::shared_ptr<HttpConnection> con, uint32_t id, uint32_t section_id)
 {
 	Json::Value root;
-
+	// 2.人数冲突
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::Table sections = sess.getSchema("scut_sims").getTable("sections");
-	mysqlx::Row row = sections.select("1").where("section_id = :sid AND `number` < max_capacity")
-		.bind("sid", section_id)
-		.execute().fetchOne();
-	// 有位置
-	if (!row.isNull())
-	{
-		sess.sql("CALL st_register_course(?,?)").bind(id).bind(section_id).execute();
-		root["result"] = true;
-	}
-	else
-	{
-		root["result"] = false;
-		root["reason"] = "Section full";
-	}
+
+	sess.sql("CALL st_register_course(?,?)").bind(id).bind(section_id).execute();
+	root["result"] = true;
 	sess.close();
 
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
 	con->GetResponse().prepare_payload();
 	con->StartWrite();
 }
+
+
 
 void StudentHandler::withdraw_course(std::shared_ptr<HttpConnection> con, uint32_t id, uint32_t section_id)
 {
@@ -123,7 +118,7 @@ void StudentHandler::withdraw_course(std::shared_ptr<HttpConnection> con, uint32
 	con->StartWrite();
 }
 
-void StudentHandler::get_schedule(std::shared_ptr<HttpConnection> con, uint32_t id, const std::string semester)
+void StudentHandler::get_schedule(std::shared_ptr<HttpConnection> con, uint32_t id, StringRef semester)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_get_schedule(?,?)").bind(id).bind(semester).execute();
@@ -216,7 +211,7 @@ void StudentHandler::ParseTimeString(std::string_view str_v, Json::Value& timeAr
 		else
 		{
 			timeObj["time"] = std::string(str_v);
-			str_v = str_v.substr(str_v.size());
+			return;
 		}
 		timeArr.append(timeObj);
 	} while (str_v.size() > 0);

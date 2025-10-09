@@ -75,14 +75,15 @@ void AdminHandler::del_someone(std::shared_ptr<HttpConnection> con, const std::v
 	con->StartWrite();
 }
 
-void AdminHandler::add_student(std::shared_ptr<HttpConnection> con, StringRef name, StringRef gender, uint32_t grade, StringRef major, uint32_t college_id)
+void AdminHandler::add_student(std::shared_ptr<HttpConnection> con, StringRef name, StringRef gender, 
+	uint32_t grade, uint32_t major_id, uint32_t college_id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res =  sess.sql("CALL adm_add_student(:name, :gender, :grade, :major, :college_id)")
+	mysqlx::RowResult res =  sess.sql("CALL adm_add_student(:name, :gender, :grade, :major_id, :college_id)")
 		.bind("name", name)
 		.bind("gender", gender)
 		.bind("grade", grade)
-		.bind("major", major)
+		.bind("major_id", major_id)
 		.bind("college_id", college_id)
 		.execute();
 	sess.close();
@@ -404,7 +405,7 @@ void AdminHandler::ParseTimeString(std::string_view str_v, Json::Value& timeArr)
 		else
 		{
 			timeObj["time"] = std::string(str_v);
-			str_v = str_v.substr(str_v.size());
+			return;
 		}
 		timeArr.append(timeObj);
 	} while (str_v.size() > 0);

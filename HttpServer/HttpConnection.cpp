@@ -5,9 +5,10 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <iostream>
+#include "Log.h"
+#include "Tools.h"
 
-
-HttpConnection::HttpConnection(boost::asio::io_context& ioc, HttpServer& server)
+HttpConnection::HttpConnection(boost::asio::io_context& ioc, HttpServer& server) noexcept
 	:_socket(ioc), _server(server), _user_id(0)
 {
 	boost::uuids::uuid a_uuid = boost::uuids::random_generator()();
@@ -15,53 +16,54 @@ HttpConnection::HttpConnection(boost::asio::io_context& ioc, HttpServer& server)
 }
 
 
-
-boost::asio::ip::tcp::socket& HttpConnection::GetSocket()
+boost::asio::ip::tcp::socket& HttpConnection::GetSocket() noexcept
 {
 	return _socket;
 }
 
-std::string_view HttpConnection::GetUuid()
+std::string_view HttpConnection::GetUuid() noexcept
 {
 	return _uuid;
 }
-beast::http::response<beast::http::dynamic_body>& HttpConnection::GetResponse()
+beast::http::response<beast::http::dynamic_body>& HttpConnection::GetResponse() noexcept
 {
 	return _response;
 }
 
 void HttpConnection::StartWrite()
 {
-	std::cout << "After StartWrite response\n" <<
-		_response << std::endl;
-
+	LOG_INFO("After StartWrite response\n" << _response);
 	beast::http::async_write(_socket, _response,
-		[self = shared_from_this()](beast::error_code ec, size_t) {
+		[this, self = shared_from_this()](beast::error_code ec, size_t) {
 			if (ec)
 			{
-				std::cout << "StartWrite's async_write error is \n" << ec.what() << std::endl;
-				self->CloseConnection();
+				LOG_INFO("HttpConnection async_write error is " << ec.what());
+				CloseConnection();
 				return;
 			}
-			self->StartRead();
+			StartRead();
 		});
 }
 
 void HttpConnection::ReadLogin()
 {
-	std::cout << "ReadLogin\n";
+	LOG_INFO("Start ReadLogin");
 	beast::http::async_read(_socket, _buffer, _request,
-		[self = shared_from_this() ](beast::error_code ec, size_t bytes_transferred) {
+		[this, self = shared_from_this() ](beast::error_code ec, size_t bytes_transferred) {
 			boost::ignore_unused(bytes_transferred);
 			if (!ec)
 			{
-				std::cout << "---- HandleLogin ---- \n target is" << self->_request.target() << std::endl;
-				self->HandleLogin();
+				LOG_INFO("---- HandleLogin ---- \n target is" << _request.target());
+				if (!HandleLogin())
+				{
+					SetBadRequest("Login-Failure");
+					ReadLogin();
+				}
 			}
 			else
 			{
-				std::cout << "HttpConnection Async Read Error is " << ec.what() << std::endl;
-				self->CloseConnection();
+				LOG_INFO("ReadLogin async_read error is " << ec.message());
+				CloseConnection();
 			}
 		});
 
@@ -86,9 +88,8 @@ void HttpConnection::ResetTimer()
 }
 
 
-void HttpConnection::HandleLogin()
+bool HttpConnection::HandleLogin()
 {
-
 	try
 	{
 		_response.version(_request.version());
@@ -98,15 +99,13 @@ void HttpConnection::HandleLogin()
 		_response.set(beast::http::field::access_control_allow_methods, "GET, POST, OPTIONS");
 		_response.set(beast::http::field::access_control_allow_headers, "Content-Type");
 
-
 		if (_request.method() == beast::http::verb::options) {
 			_response.result(beast::http::status::ok);
 			_response.prepare_payload();
 			beast::http::write(_socket, _response);
 			ReadLogin();
-			return;
+			return true;
 		}
-
 
 		// 登陆请求
 		if (_request.method() == beast::http::verb::post &&
@@ -120,9 +119,8 @@ void HttpConnection::HandleLogin()
 			if (!ParseUserData(body_str, recv))
 			{
 				// 解析失败
-				std::cout << "ParseUserData error\n";
-				SetBadRequest();
-				return;
+				LOG_INFO("ParseUserData Failed");
+				return false;
 			}
 
 			_user_id = stoi(recv["user_id"].asString());
@@ -135,28 +133,26 @@ void HttpConnection::HandleLogin()
 			if (!UserExists(_user_id, _password, _role))
 			{
 				// 用户不存在
-				std::cout << "User does not exist \n";
-				SetBadRequest();
-				return;
+				LOG_INFO("User Not Exist");
+				return false;
 			}
-			std::cout << "User exist \n";
-			Json::Value send;
+			LOG_INFO("User Exists, Login Success");
 			_response.result(beast::http::status::ok);
-			send["id"] = _user_id;
-			send["user_id"] = _user_id;
+			Json::Value send;
 			send["result"] = true;
+			send["id"] = _user_id;
+			send["user_id"] = _user_id;	
 			beast::ostream(_response.body()) << Json::writeString(_writerBuilder, send);
 			WriteLoginSuccess();
-			return;
+			return true;
 		}
-		std::cout << "Bad Login Request\n";
-		SetBadRequest(); // 不符合登陆请求格式
+		LOG_INFO("Not Login Request"); // 不符合登陆请求格式
+		return false;
 	}
 	catch(const std::exception& e)
 	{
-		std::cout << "HandleLogin Exception is " << e.what() << std::endl;
-		SetBadRequest();
-		return;
+		LOG_INFO("HandleLogin Exception is " << e.what());
+		return false;
 	}
 
 }
@@ -192,12 +188,12 @@ bool HttpConnection::UserExists(uint32_t user_id, const std::string& password, c
 		return result.count() > 0;
 	}
 	catch (const mysqlx::Error& err) {
-		std::cerr << "数据库查询错误: " << err.what() << std::endl;
+		LOG_DEBUG("Database Error: " << err.what());
 		return false;
 	}
 }
 
-void HttpConnection::SetBadRequest()
+void HttpConnection::SetBadRequest() noexcept
 {
 	// 设置状态码
 	_response.result(beast::http::status::bad_request);
@@ -205,12 +201,35 @@ void HttpConnection::SetBadRequest()
 	Json::Value send;
 	send["result"] = false;
 	beast::ostream(_response.body()) << Json::writeString(_writerBuilder, send);
+	_response.prepare_payload();
 	WriteBadResponse();
 }
 
-void HttpConnection::WriteBadResponse()
+void HttpConnection::SetBadRequest(Json::Value& message) noexcept
 {
+	// 设置状态码: 字段值不符合业务
+	_response.result(beast::http::status::unprocessable_entity);
+	// _response.set(beast::http::field::connection, "keep-alive"); 
+	beast::ostream(_response.body()) << Json::writeString(_writerBuilder, message);
 	_response.prepare_payload();
+	WriteBadResponse();
+}
+
+void HttpConnection::SetBadRequest(const std::string& reason) noexcept
+{
+	// 设置状态码: 字段值不符合业务
+	LOG_ERROR(reason);
+	_response.result(beast::http::status::unprocessable_entity);
+	Json::Value root;
+	root["result"] = false;
+	root["reason"] = reason;
+	beast::ostream(_response.body()) << Json::writeString(_writerBuilder, root);
+	_response.prepare_payload();
+	WriteBadResponse();
+}
+
+void HttpConnection::WriteBadResponse() noexcept
+{
 	// 注意time_wait
 	beast::http::async_write(_socket, _response,
 		[self = shared_from_this()](beast::error_code ec, size_t) {
@@ -219,10 +238,9 @@ void HttpConnection::WriteBadResponse()
 				std::cout << "WriteBadResponse async_write error is "
 					<< ec.what();
 			}
-			self->CloseConnection();
+			// self->CloseConnection();
 		}
 	);
-
 }
 
 void HttpConnection::WriteLoginSuccess()
@@ -241,17 +259,18 @@ void HttpConnection::WriteLoginSuccess()
 void HttpConnection::StartRead()
 {
 	_response.body().clear();
+
 	beast::http::async_read(_socket, _buffer, _request,
 		[self = shared_from_this()](beast::error_code ec, size_t bytes_transferred) {
-			boost::ignore_unused(bytes_transferred);
+			boost::ignore_unused(bytes_transferred); // 可选
 			if (!ec)
 			{
+				LOG_INFO("The target is " << self->_request.target());
 				self->HandleRead();
-				std::cout << "After Login, the target is " << self->_request.target() << std::endl;
 			}
 			else
 			{
-				std::cout << "HttpConnection Async Read Error is " << ec.what() << std::endl;
+				LOG_INFO("HttpConnection Async Read Error is " << ec.what());
 				self->CloseConnection();
 			}
 		});
@@ -262,7 +281,6 @@ void HttpConnection::HandleRead()
 	
 	_response.version(_request.version());
 	_response.keep_alive(_request.keep_alive());
-	std::cout << "target is " << _request.target() << std::endl;
 	try
 	{
 		if (_request.method() == beast::http::verb::options) {
@@ -274,29 +292,32 @@ void HttpConnection::HandleRead()
 		}
 		if (_role == "student")
 		{
-			std::cout << "Student Request\n";
+			LOG_INFO("Student Request");
 			StudentRequest();
 		}
 		else if (_role == "instructor")
 		{
+			LOG_INFO("Instructor Request");
 			InstructorRequest();
 		}
 		else if (_role == "administor")
 		{
+			LOG_INFO("Administor Request");
 			AdminRequest();
 		}
 		else
 		{
-			std::cout << "role error" << std::endl;
+			LOG_INFO(" Wrong Role, But It's Impossible");
 		}
 	}
 	catch (std::exception& e)
 	{
-		std::cout << "HandleRead Exception is " << e.what() << std::endl;
+		LOG_INFO("HandleRead Exception is " << e.what());
 		SetBadRequest();
+		CloseConnection();
 		return;
 	}
-	
+	StartRead();
 }
 
 void HttpConnection::StudentRequest()
@@ -319,17 +340,11 @@ void HttpConnection::StudentRequest()
 				_studentHandler.browse_courses(self, _user_id); });
 		}
 		// 课表
-		else if (_request.target().substr(0, sizeof("/api/student_tableCheck") - 1 ) == "/api/student_tableCheck")
+		else if (_request.target().substr(0, sizeof("/api/student_tableCheck/ask?semester=") - 1 ) ==
+			"/api/student_tableCheck/ask?semester=")
 		{
-			// semester=2025春
-			auto pos = _request.target().find("semester=");
-			if (pos == std::string_view::npos)
-			{
-				SetBadRequest();
-				return;
-			}
-			pos += sizeof("semester=") - 1;
-			std::string str(_request.target().substr(pos));
+			constexpr size_t len = sizeof("/api/student_tableCheck/ask?semester=") - 1;
+			std::string str(_request.target().substr(len));
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), str = std::move(str)]() {
 				_studentHandler.get_schedule(self, _user_id, str); });
 		}
@@ -345,6 +360,12 @@ void HttpConnection::StudentRequest()
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this()]() {
 				_studentHandler.calculate_gpa(self, _user_id); });
 		}
+		else
+		{
+			LOG_ERROR("StudentRequest Wrong");
+			SetBadRequest("StudentRequest Wrong");
+		}
+			
 		break;
 	}
 	case beast::http::verb::post:
@@ -355,8 +376,7 @@ void HttpConnection::StudentRequest()
 		if (!ParseUserData(body_str, recv))
 		{
 			// 解析失败
-			std::cout << "ParseUserData error\n";
-			SetBadRequest();
+			SetBadRequest("ParseUserData error");
 			return;
 		}
 
@@ -364,6 +384,60 @@ void HttpConnection::StudentRequest()
 		if (_request.target() == "/api/student_select/submit")
 		{
 			uint32_t section_id = stoi(recv["section_id"].asString());
+
+			Json::Value root;
+			// 2.人数冲突
+			mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
+			mysqlx::Table sections = sess.getSchema("scut_sims").getTable("sections");
+			auto row = sections.select("1").where("section_id = :sid AND `number` < max_capacity")
+				.bind("sid", section_id)
+				.execute().fetchOne();
+
+			if (row.isNull())
+			{
+				SetBadRequest("Section Full");
+				return;
+			}
+
+			// 3.选课时间冲突
+			static const std::unordered_map<std::string, int> weekdayMap = {
+				{GetUTF8ForDatabase(L"周一"), 1},
+				{GetUTF8ForDatabase(L"周二"), 2},
+				{GetUTF8ForDatabase(L"周三"), 3},
+				{GetUTF8ForDatabase(L"周四"), 4},
+				{GetUTF8ForDatabase(L"周五"), 5},
+				{GetUTF8ForDatabase(L"周六"), 6},
+				{GetUTF8ForDatabase(L"周日"), 7}
+			};
+
+			bool timetable[22][8][9];
+			memset(timetable, 0, sizeof timetable); // ok
+
+			mysqlx::RowResult result = sess.sql(
+				"SELECT s.start_week, s.end_week, s.time_slot "
+				"FROM enrollments e "
+				"JOIN sections s USING (section_id) "
+				"WHERE e.student_id = ? AND e.status = 'Enrolling'"
+			).bind(_user_id).execute();
+
+			for (auto row : result)
+			{
+				ProcessRow(row, timetable, weekdayMap, 1);
+			}
+
+			row = sess.sql(
+				"SELECT start_week, end_week, time_slot"
+				"FROM sections s"
+				"WHERE section_id = ?;"
+			).bind(section_id).execute().fetchOne();
+
+			bool ok = ProcessRow(row, timetable, weekdayMap, 0);
+			if (!ok)
+			{
+				SetBadRequest("Course Time Conflict");
+				return;
+			}
+
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), section_id]() {
 				_studentHandler.register_course(self, _user_id, section_id); });
 		}
@@ -377,23 +451,120 @@ void HttpConnection::StudentRequest()
 		// 修改个人信息
 		else if (_request.target() == "/api/student_infoCheck/modify")
 		{
+			auto birthday = recv["birthday"].asString();
+			auto email = recv["email"].asString();
+			auto phone = recv["phone"].asString();
+			auto password = recv["password"].asString();
+
+			bool ok = false;
+			if (!DataValidator::isValidDate(birthday))
+				SetBadRequest("birthday error");
+			else if (!DataValidator::isValidEmail(email))
+				SetBadRequest("birthday error");
+			else if (!DataValidator::isValidPhone(phone))
+				SetBadRequest("birthday error");
+			else if (!DataValidator::isValidPassword(password))
+				SetBadRequest("birthday error");
+			else
+				ok = true;
+
+			if (!ok) return;
 			LogicSystem::Instance().PushToQue(
-				[this, self = shared_from_this(), recv]() {
-					auto birthday = recv["birthday"].asString();
-					auto email = recv["email"].asString();
-					auto phone = recv["phone"].asString();
-					auto password = recv["password"].asString();
-					_studentHandler.update_personal_info(self, _user_id, birthday, email, phone, password); 
+				[
+					birthday = std::move(birthday),
+					email = std::move(email),
+					phone = std::move(phone),
+					password = std::move(password),
+					this, self = shared_from_this()
+				]() {
+					
+					_studentHandler.update_personal_info(self, _user_id, birthday, email, phone, password);
 				});
+		}
+		else
+		{
+			SetBadRequest("StudentRequest Wrong");
 		}
 
 		break;
 	}
 	default:
-		std::cout << "StudentRequest Wrong, SetBadRequest\n";
-		SetBadRequest();
+		SetBadRequest("StudentRequest Wrong Method");
 		break;
 	}
+}
+
+// 1 对应已选，0对应即将选但还未选
+bool HttpConnection::ProcessRow(const mysqlx::Row& row, bool timetable[22][8][9],
+	const std::unordered_map<std::string, int>& weekdayMap, size_t choice)
+{
+	auto start_week = row[0].get<uint32_t>();
+	auto end_week = row[1].get<uint32_t>();
+	auto time_slot = row[2].get<std::string>();
+	LOG_INFO(
+		   "start-week: " << start_week << " "
+		<< "end-week: " << end_week << " "
+		<< "time_slot: " << time_slot << std::endl);
+
+	std::string_view str_v(time_slot);
+
+	do // 一个row中有可能有多条时间
+	{
+		// 处理time_slot
+		uint32_t Day = 0;
+		uint32_t L = 0, R = 0;
+
+		auto t = str_v.find(" "); // 分割出星期几
+		if (t != std::string_view::npos)
+		{
+			const std::string s(str_v.data(), t);
+			auto it = weekdayMap.find(s);
+			if (it != weekdayMap.end())
+				Day = it->second;
+		}
+		else
+		{
+			LOG_ERROR("Format Error");
+			break;
+		}
+
+		t = str_v.find("-"); // 找到数字
+		if (t != std::string::npos)
+		{
+			L = time_slot[t - 1] - '0';
+			R = time_slot[t + 1] - '0';
+		}
+		else
+		{
+			LOG_ERROR("Format Error");
+			break;
+		}
+
+		LOG_INFO("day: " << Day << "; time: " << L << "-" << R);
+		// 已经有的课
+		if (choice)
+		{
+			for (size_t i = start_week; i <= end_week; ++i)
+				for (size_t j = L; j <= R; ++j)
+					timetable[i][Day][j] = true;
+		}
+		else // 即将要选的课
+		{
+			for (size_t i = start_week; i <= end_week; ++i)
+				for (size_t j = L; j <= R; ++j)
+					if (timetable[i][Day][j]) return false;
+					else timetable[i][Day][j] = true;
+		}
+
+		t = str_v.find(",");
+		if (t != std::string_view::npos) // 后面还有时间
+			str_v = str_v.substr(t + 1);
+		else
+			break;
+
+	} while (str_v.size() > 0);
+
+	return true;
 }
 
 void HttpConnection::InstructorRequest()
@@ -403,32 +574,20 @@ void HttpConnection::InstructorRequest()
 	case beast::http::verb::get:
 	{
 		// 查课表
-		if (_request.target().substr(0, sizeof("/api/teacher_tableCheck/ask?") - 1) 
-			== "/api/teacher_tableCheck/ask?") //semester=2025春
+		if (_request.target().substr(0, sizeof("/api/teacher_tableCheck/ask?semester=") - 1) 
+			== "/api/teacher_tableCheck/ask?semester=") //semester=2025春
 		{
-			auto pos = _request.target().find("semester=");
-			if (pos == std::string_view::npos)
-			{
-				SetBadRequest();
-				return;
-			}
-			pos += sizeof("semester=") - 1;
-			std::string str(_request.target().substr(pos));
+			constexpr size_t len = sizeof("/api/teacher_tableCheck/ask?semester=") - 1;
+			std::string str(_request.target().substr(len));
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), str = std::move(str)]() {
 				_instructorHandler.get_teaching_sections(self, _user_id, str); });
 		}
 		// 查学生名单
-		else if (_request.target().substr(0, sizeof("/api/teacher_scoreIn/ask?") - 1) 
-			== "/api/teacher_scoreIn/ask?")
+		else if (_request.target().substr(0, sizeof("/api/teacher_scoreIn/ask?section_id=") - 1) 
+			== "/api/teacher_scoreIn/ask?section_id=")
 		{
-			auto pos = _request.target().find("section_id=");
-			if (pos == std::string_view::npos)
-			{
-				SetBadRequest();
-				return;
-			}
-			pos += sizeof("section_id=") - 1;
-			std::string_view strv(_request.target().substr(pos));
+			constexpr size_t len = sizeof("/api/teacher_scoreIn/ask?section_id=") - 1;
+			std::string_view strv(_request.target().substr(len));
 			uint32_t section_id = stoi(std::string(strv));
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), section_id]() {
 				_instructorHandler.get_section_students(self, section_id); });
@@ -439,6 +598,11 @@ void HttpConnection::InstructorRequest()
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this()]() {
 				_instructorHandler.get_personal_info(self, _user_id); });
 		}
+		else
+		{
+			SetBadRequest("InstructorRequest Wrong");
+		}
+			
 		break;
 	}
 	case beast::http::verb::post:
@@ -449,35 +613,58 @@ void HttpConnection::InstructorRequest()
 		if (!ParseUserData(body_str, recv))
 		{
 			// 解析失败
-			std::cout << "ParseUserData error\n";
-			SetBadRequest();
+			SetBadRequest("ParseUserData error");
 			return;
 		}
 
-		if(_request.target() == "/api/teacher_scoreIn/enter")
+		if (_request.target() == "/api/teacher_scoreIn/enter")
 		{
 			uint32_t student_id = stoi(recv["student_id"].asString());
 			uint32_t section_id = stoi(recv["section_id"].asString());
 			uint32_t score = stoi(recv["score"].asString());
-			LogicSystem::Instance().PushToQue([ = , this, self = shared_from_this()]() {
+			LogicSystem::Instance().PushToQue([=, this, self = shared_from_this()]() {
 				_instructorHandler.post_grades(self, student_id, section_id, score); });
-		} 
+		}
 		else if (_request.target() == "/api/teacher_infoCheck/submit")
 		{
+			auto college = recv["college"].asString();
+			auto email = recv["email"].asString();
+			auto phone = recv["phone"].asString();
+			auto password = recv["password"].asString();
+
+			bool ok = false;
+			if (!DataValidator::isValidEmail(email))
+				SetBadRequest("Email Error");
+			else if (!DataValidator::isValidPhone(phone))
+				SetBadRequest("Phone Error");
+			else if (!DataValidator::isValidPassword(password))
+				SetBadRequest("Password Error");
+			else
+				ok = true;
+			if (!ok)
+				return;
+
+			// 也可选择交给当前线程处理，这里交给逻辑线程处理recv
 			LogicSystem::Instance().PushToQue(
-				[this, self = shared_from_this(), recv]() {
-					auto college	= recv["college"].asString();
-					auto email		= recv["email"].asString();
-					auto phone		= recv["phone"].asString();
-					auto password	= recv["password"].asString();
+				[
+					college = std::move(college),
+					email = std::move(email),
+					phone = std::move(phone),
+					password = std::move(password),
+					this, self = shared_from_this()
+				]() {
 					_instructorHandler.update_personal_info(self, _user_id, college, email, phone, password);
 				});
 		}
+		else
+		{
+			SetBadRequest("InstructorRequest Wrong");
+		}
+
 		break;
 	}
 	default:
-		// 设置状态码
-		SetBadRequest();
+		SetBadRequest("InstructorRequest Wrong Method");
 		break;
 	}
 }
@@ -503,7 +690,8 @@ void HttpConnection::AdminRequest()
 					else if (str == "teacher")
 						_adminHandler.get_instructors_info(self);
 					else
-						SetBadRequest();
+						SetBadRequest("role is not student or teacher");
+
 				});
 		}
 		// 4.获取某学期的所有课程
@@ -517,9 +705,96 @@ void HttpConnection::AdminRequest()
 					_adminHandler.get_sections(self, seme);
 				});
 		}
-
-		else 
-			SetBadRequest();
+		// 8. 获取课程成绩分布
+		else if (target.substr(0, sizeof("/api/admin_scoreCheck/course?section_id=") - 1) ==
+			"/api/admin_scoreCheck/course?section_id=")
+		{
+			constexpr size_t len = sizeof("/api/admin_scoreCheck/course?section_id=") - 1;
+			std::string str(target.substr(len));
+			uint32_t section_id = stoi(str);
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), section_id]()
+				{
+					_adminHandler.view_grade_statistics(self, section_id);
+				});
+		}
+		// 9. 获取某学生某学期成绩
+		else if (target.substr(0, sizeof("/api/admin_scoreCheck/student?") - 1) ==
+			"/api/admin_scoreCheck/student?")
+		{ // /api/admin_scoreCheck/student?student_id=5484&semester=2025春
+			auto pos_id = target.find("student_id=");
+			auto pos_sem = target.find("&semester=");
+			if (pos_id == std::string_view::npos || pos_sem == std::string_view::npos)
+			{
+				SetBadRequest("student_id= &semester= were not founded");
+				return;
+			}
+			pos_id += sizeof("student_id=") - 1;
+			std::string_view strv_id(target.substr(pos_id, pos_sem - pos_id)); // 先让pos_sem 指向&
+			pos_sem += sizeof("&semester=") - 1;
+			std::string str_sem(target.substr(pos_sem));
+			uint32_t user_id = stoi(std::string(strv_id));
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), user_id, seme = std::move(str_sem)]()
+				{
+					_adminHandler.get_student_grades(self, user_id, seme);
+				});
+		}
+		// 10.教授所教课程的平均成绩
+		else if (target.substr(0, sizeof("/api/admin_scoreCheck/teacher?") - 1) ==
+			"/api/admin_scoreCheck/teacher?")
+		{// /api/admin_scoreCheck/teacher?teacher_id=546&semester=2025春
+			auto pos_id = target.find("teacher_id=");
+			auto pos_sem = target.find("&semester=");
+			if (pos_id == std::string_view::npos || pos_sem == std::string_view::npos)
+			{
+				SetBadRequest("teacher_id= &semester= were not founded");
+				return;
+			}
+			pos_id += sizeof("teacher_id=") - 1;
+			std::string_view strv_id(target.substr(pos_id, pos_sem - pos_id)); // 先让pos_sem 指向&
+			pos_sem += sizeof("&semester=") - 1;
+			std::string str_sem(target.substr(pos_sem));
+			uint32_t user_id = stoi(std::string(strv_id));
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), user_id, seme = std::move(str_sem)]()
+				{
+					_adminHandler.get_instructor_grades(self, user_id, seme);
+				});
+		}
+		// 11. 获取所有学院
+		else if (target == "/api/admin/general/getAllCollege")
+		{
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this()]()
+				{
+					_adminHandler.get_colleges(self);
+				});
+		}
+		// 12.获取某个学院的所有课程
+		else if (target.substr(0, sizeof("/api/admin/general/getCollegeCourse?college_id=") - 1) ==
+			"/api/admin/general/getCollegeCourse?college_id=")
+		{
+			constexpr size_t len = sizeof("/api/admin/general/getCollegeCourse?college_id=") - 1;
+			std::string str(target.substr(len));
+			uint32_t college_id = stoi(str);
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), college_id]()
+				{
+					_adminHandler.get_college_courses(self, college_id);
+				});
+		}
+		else if(target.substr(0, sizeof("/api/admin/general/getCollegeTeacher?college_id=") - 1) ==
+			"/api/admin/general/getCollegeTeacher?college_id=")
+		{
+			constexpr size_t len = sizeof("/api/admin/general/getCollegeInstructor?college_id=") - 1;
+			std::string str(target.substr(len));
+			uint32_t college_id = stoi(str);
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), college_id]()
+				{
+					_adminHandler.get_college_instructors(self, college_id);
+				});
+		}
+		else
+		{
+			SetBadRequest("AdminRequest Wrong");
+		}
+			
 
 		break;
 	}
@@ -531,8 +806,7 @@ void HttpConnection::AdminRequest()
 		if (!ParseUserData(body_str, recv))
 		{
 			// 解析失败
-			std::cout << "ParseUserData error\n";
-			SetBadRequest();
+			SetBadRequest("ParseUserData error");
 			return;
 		}
 
@@ -540,7 +814,6 @@ void HttpConnection::AdminRequest()
 		if (target == "/api/admin_accountManage/deleteInfo")
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), recv]()
 				{
-
 					std::vector<uint32_t> user_id;
 					std::vector<std::string> role;
 					Json::Value deleteInfo = recv["deleteInfo"];
@@ -562,7 +835,7 @@ void HttpConnection::AdminRequest()
 							recv["name"].asString(),
 							recv["gender"].asString(),
 							recv["grade"].asUInt(),
-							recv["major"].asString(),
+							stoi(recv["major_id"].asString()),
 							recv["college_id"].asUInt());
 					}
 					else if (role == "teacher")
@@ -572,7 +845,8 @@ void HttpConnection::AdminRequest()
 							stoi(recv["college_id"].asString()));
 					}
 					else
-						SetBadRequest();
+						SetBadRequest("Role was not teacher or student");
+
 				});
 		else if (target == "/api/admin_courseManage/newCourse")
 		{
@@ -611,8 +885,24 @@ void HttpConnection::AdminRequest()
 					});
 			}
 		}
+		else if (target == "/api/admin_courseManage/changeCourse")
+		{
+			Json::Value courseData = recv["courseData"];
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), courseData]()
+				{
+					_adminHandler.modify_section(self,
+						courseData["section_id"].asUInt(),
+						courseData["teacher_id"].asUInt(),
+						courseData["schedule"].asString(),
+						courseData["startWeek"].asUInt(),
+						courseData["endWeek"].asUInt(),
+						courseData["location"].asString());
+				});
+		}
 		else
-			SetBadRequest();
+		{
+			SetBadRequest("AdminRequest Wrong");
+		}
 
 		break;
 	}
@@ -624,8 +914,7 @@ void HttpConnection::AdminRequest()
 		if (!ParseUserData(body_str, recv))
 		{
 			// 解析失败
-			std::cout << "ParseUserData error\n";
-			SetBadRequest();
+			SetBadRequest("ParseUserData error");
 			return;
 		}
 		// 5.删除某些课程/api/admin_courseManage/deleteCourse
@@ -643,17 +932,23 @@ void HttpConnection::AdminRequest()
 				});
 		}
 		else
-			SetBadRequest();
+		{
+			SetBadRequest("AdminRequest Wrong");
+		}
 		break;
 	}
 	default:
-		SetBadRequest();
+		SetBadRequest("AdminRequest Wrong Method");
 		break;
 	}
 }
 
-void HttpConnection::CloseConnection()
+void HttpConnection::CloseConnection() noexcept
 {
 	_socket.close();
 	_server.ClearConnection(_uuid);
 }
+
+StudentHandler HttpConnection::_studentHandler;
+InstructorHandler HttpConnection::_instructorHandler;
+AdminHandler HttpConnection::_adminHandler;

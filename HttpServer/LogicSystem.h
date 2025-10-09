@@ -11,17 +11,17 @@ class LogicSystem
 public:
 	LogicSystem(const LogicSystem&) = delete;
 	LogicSystem& operator=(const LogicSystem&) = delete;
-	static LogicSystem& Instance();
+	static LogicSystem& Instance() noexcept;
 	void WorkFunc();
-	void Stop();
+	void Stop() noexcept;
 
 	// 通用任务入队函数
 	template<typename Func, typename... Args>
 	inline void PushToQue(Func&& func, Args&&... args);
 
 private:
-	LogicSystem();
-	~LogicSystem();
+	LogicSystem() noexcept;
+	~LogicSystem() noexcept;
 	bool _stop = false;
 	std::thread _worker;
 	std::condition_variable _conVar;

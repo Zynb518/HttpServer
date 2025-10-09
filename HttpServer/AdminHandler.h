@@ -20,7 +20,7 @@ public:
 		const std::vector<std::string>& role);
 
 	void add_student(std::shared_ptr<HttpConnection> con, StringRef name,
-		StringRef gender, uint32_t grade, StringRef major, uint32_t college_id);
+		StringRef gender, uint32_t grade, uint32_t major_id, uint32_t college_id);
 
 	void add_instructor(std::shared_ptr<HttpConnection> con, StringRef name,
 		uint32_t college_id);

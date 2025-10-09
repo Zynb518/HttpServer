@@ -108,7 +108,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
@@ -144,6 +144,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MysqlConnectionPool.cpp" />
     <ClCompile Include="StudentHandler.cpp" />
+    <ClCompile Include="Tools.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AdminHandler.h" />
@@ -151,9 +152,11 @@
     <ClInclude Include="HttpServer.h" />
     <ClInclude Include="InstructorHandler.h" />
     <ClInclude Include="IOServicePool.h" />
+    <ClInclude Include="Log.h" />
     <ClInclude Include="LogicSystem.h" />
     <ClInclude Include="MysqlConnectionPool.h" />
     <ClInclude Include="StudentHandler.h" />
+    <ClInclude Include="Tools.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

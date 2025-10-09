@@ -1,6 +1,7 @@
 #include "InstructorHandler.h"
 #include "MysqlConnectionPool.h"
 #include "HttpConnection.h"
+#include "Tools.h"
 #include <boost/beast.hpp>
 
 namespace beast = boost::beast;
@@ -31,6 +32,8 @@ void InstructorHandler::update_personal_info(std::shared_ptr<HttpConnection> con
 	const std::string& phone, 
 	const std::string& password)
 {
+	Json::Value root;
+
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	sess.sql("CALL ins_update_personal_info(:id, :college, :email, :phone, :password)")
 		.bind("id", id)
@@ -41,7 +44,7 @@ void InstructorHandler::update_personal_info(std::shared_ptr<HttpConnection> con
 		.execute();
 	sess.close();
 
-	Json::Value root;
+	
 	root["result"] = true;
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
 	con->GetResponse().prepare_payload();
@@ -94,7 +97,7 @@ void InstructorHandler::get_section_students(std::shared_ptr<HttpConnection> con
 	root["credit"] = row[2].get<uint32_t>();
 	root["teacher"] = row[3].get<std::string>();
 	
-	if(results.nextResult());
+	if(results.nextResult())
 	{
 		while (row = results.fetchOne())
 		{
@@ -155,7 +158,7 @@ void InstructorHandler::ParseTimeString(std::string_view str_v, Json::Value& tim
 		else
 		{
 			timeObj["time"] = std::string(str_v);
-			str_v = str_v.substr(str_v.size());
+			return;
 		}
 		timeArr.append(timeObj);
 	} while (str_v.size() > 0);

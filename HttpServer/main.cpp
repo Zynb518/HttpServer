@@ -1,17 +1,27 @@
 ﻿// HttpServer.cpp : 此文件包含 "main" 函数。程序执行将在此处开始并结束。
 
 #include <iostream>
-#include "HttpServer.h"
-#include "MysqlConnectionPool.h"
+#include <string>
+#include <sstream>
 #include <json/json.h>
 #include <mysqlx/xdevapi.h>
+#include <unordered_map>
 
+#include "HttpServer.h"
+#include "MysqlConnectionPool.h"
+#include "Log.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 int main()
 {
     try{
 #ifdef _WIN32
         system("chcp 65001 > nul");
 #endif
+
+
         boost::asio::io_context ioc;
         HttpServer server(ioc, 10086);
         ioc.run();
