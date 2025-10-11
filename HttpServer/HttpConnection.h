@@ -33,19 +33,22 @@ private:
 	bool HandleLogin(); // 解析request
 	bool ParseUserData(const std::string& body, Json::Value& recv); // 解析消息体到recv_root
 	bool UserExists(uint32_t user_id, const std::string& password, const std::string& role); // 用户是否存在
-
-	void SetBadRequest() noexcept; // BadRequest close，再手动CloseConnection
+	
+	// BadRequest close，再手动CloseConnection
+	void SetBadRequest() noexcept; 
 
 	void WriteBadResponse() noexcept;
-	void WriteLoginSuccess(); // 正常发送 登陆成功
+	// 正常发送 登陆成功
+	void WriteLoginSuccess(); 
 
 	// 接受用户操作
 	void StartRead();
-
-	void HandleRead(); // 解析HTTP request
+	// 解析HTTP request
+	void HandleRead(); 
 	void StudentRequest();
-	bool ProcessRow(const mysqlx::Row& row, bool timetable[22][8][9],
-		const std::unordered_map<std::string, int>& weekdayMap, size_t choice);
+	bool ProcessRow(const mysqlx::Row& row, size_t choice);
+	// 处理 startWeek, endWeek, schedule的重载, 处理即将要选的课, choice为1检验，choice为0，去1
+	bool ProcessRow(uint32_t start_week, uint32_t end_week, const std::string& time_slot, uint32_t choice);
 
 	void InstructorRequest();
 	void AdminRequest();
@@ -54,7 +57,6 @@ private:
 	std::string ProcessSchedule(const Json::Value& schedule);
 
 	void CloseConnection() noexcept;
-
 
 private:
 	tcp::socket _socket;
@@ -72,6 +74,7 @@ private:
 	Json::StreamWriterBuilder _writerBuilder;
 	Json::CharReaderBuilder _readerBuilder;
 
+	// 保存用户数据
 	uint32_t _user_id;
 	std::string _password;
 	std::string _role;

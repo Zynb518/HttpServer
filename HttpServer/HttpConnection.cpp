@@ -11,6 +11,18 @@
 #include "Log.h"
 #include "Tools.h"
 
+bool timetable[22][8][9];
+
+static const std::unordered_map<std::string, int> weekdayMap = {
+				{GetUTF8ForDatabase(L"周一"), 1},
+				{GetUTF8ForDatabase(L"周二"), 2},
+				{GetUTF8ForDatabase(L"周三"), 3},
+				{GetUTF8ForDatabase(L"周四"), 4},
+				{GetUTF8ForDatabase(L"周五"), 5},
+				{GetUTF8ForDatabase(L"周六"), 6},
+				{GetUTF8ForDatabase(L"周日"), 7}
+};
+
 HttpConnection::HttpConnection(boost::asio::io_context& ioc, HttpServer& server) noexcept
 	:_socket(ioc), _server(server), _user_id(0)
 {
@@ -40,7 +52,8 @@ void HttpConnection::StartWrite()
 		[this, self = shared_from_this()](beast::error_code ec, size_t) {
 			if (ec)
 			{
-				LOG_INFO("HttpConnection async_write error is " << ec.what());
+				LOG_ERROR("HttpConnection async_write error is " << ec.what());
+				LOG_ERROR("CloseConnection");
 				CloseConnection();
 				return;
 			}
@@ -57,6 +70,7 @@ void HttpConnection::ReadLogin()
 			if (!ec)
 			{
 				LOG_INFO("---- HandleLogin ---- \n target is" << _request.target());
+				LOG_INFO("The ThreadID executing HandleLogin is " << std::this_thread::get_id());
 				if (!HandleLogin())
 				{
 					SetBadRequest("Login-Failure");
@@ -66,6 +80,7 @@ void HttpConnection::ReadLogin()
 			else
 			{
 				LOG_INFO("ReadLogin async_read error is " << ec.message());
+				LOG_INFO("CloseConnection...");
 				CloseConnection();
 			}
 		});
@@ -165,7 +180,7 @@ bool HttpConnection::ParseUserData(const std::string& body, Json::Value& recv)
 	std::unique_ptr<Json::CharReader> jsonReader(_readerBuilder.newCharReader());
 	std::string err;
 	if (!jsonReader->parse(body.c_str(), body.c_str() + body.length(), &recv, &err)) {
-		std::cout << "ParseUserData Error is " << err << std::endl;
+		LOG_ERROR("ParseUserData Error is" << err);
 		return false;
 	}
 	return true;
@@ -251,12 +266,7 @@ void HttpConnection::WriteLoginSuccess()
 	_response.prepare_payload();
 	// 注意time_wait
 	beast::http::write(_socket, _response);
-	
-#if 0
-	CloseConnection();
-#else
 	StartRead();
-#endif 
 }
 
 void HttpConnection::StartRead()
@@ -274,6 +284,7 @@ void HttpConnection::StartRead()
 			else
 			{
 				LOG_INFO("HttpConnection Async Read Error is " << ec.what());
+				LOG_INFO("CloseConnection");
 				self->CloseConnection();
 			}
 		});
@@ -410,19 +421,10 @@ void HttpConnection::StudentRequest()
 			}
 
 			// 3.选课时间冲突
-			static const std::unordered_map<std::string, int> weekdayMap = {
-				{GetUTF8ForDatabase(L"周一"), 1},
-				{GetUTF8ForDatabase(L"周二"), 2},
-				{GetUTF8ForDatabase(L"周三"), 3},
-				{GetUTF8ForDatabase(L"周四"), 4},
-				{GetUTF8ForDatabase(L"周五"), 5},
-				{GetUTF8ForDatabase(L"周六"), 6},
-				{GetUTF8ForDatabase(L"周日"), 7}
-			};
 
-			bool timetable[22][8][9];
 			memset(timetable, 0, sizeof timetable); // ok
 
+			// 处理已经选的课程
 			mysqlx::RowResult result = sess.sql(
 				"SELECT s.start_week, s.end_week, s.time_slot "
 				"FROM enrollments e "
@@ -432,7 +434,7 @@ void HttpConnection::StudentRequest()
 
 			for (auto row : result)
 			{
-				ProcessRow(row, timetable, weekdayMap, 1);
+				ProcessRow(row, 1);
 			}
 
 			row = sess.sql(
@@ -441,7 +443,7 @@ void HttpConnection::StudentRequest()
 				"WHERE section_id = ?;"
 			).bind(section_id).execute().fetchOne();
 
-			bool ok = ProcessRow(row, timetable, weekdayMap, 0);
+			bool ok = ProcessRow(row, 0);
 			if (!ok)
 			{
 				SetBadRequest("Course Time Conflict");
@@ -487,7 +489,6 @@ void HttpConnection::StudentRequest()
 					password = std::move(password),
 					this, self = shared_from_this()
 				]() {
-					
 					_studentHandler.update_personal_info(self, _user_id, birthday, email, phone, password);
 				});
 		}
@@ -505,8 +506,7 @@ void HttpConnection::StudentRequest()
 }
 
 // 1 对应已选，0对应即将选但还未选
-bool HttpConnection::ProcessRow(const mysqlx::Row& row, bool timetable[22][8][9],
-	const std::unordered_map<std::string, int>& weekdayMap, size_t choice)
+bool HttpConnection::ProcessRow(const mysqlx::Row& row, size_t choice)
 {
 	auto start_week = row[0].get<uint32_t>();
 	auto end_week = row[1].get<uint32_t>();
@@ -577,6 +577,69 @@ bool HttpConnection::ProcessRow(const mysqlx::Row& row, bool timetable[22][8][9]
 	return true;
 }
 
+bool HttpConnection::ProcessRow(uint32_t start_week, uint32_t end_week, const std::string& time_slot, uint32_t choice)
+{
+	std::string_view str_v(time_slot);
+
+	do // 一个row中有可能有多条时间
+	{
+		// 处理time_slot
+		uint32_t Day = 0;
+		uint32_t L = 0, R = 0;
+
+		auto t = str_v.find(" "); // 分割出星期几
+		if (t != std::string_view::npos)
+		{
+			const std::string s(str_v.data(), t);
+			auto it = weekdayMap.find(s);
+			if (it != weekdayMap.end())
+				Day = it->second;
+		}
+		else
+		{
+			LOG_ERROR("Format Error");
+			break;
+		}
+
+		t = str_v.find("-"); // 找到数字
+		if (t != std::string::npos)
+		{
+			L = time_slot[t - 1] - '0';
+			R = time_slot[t + 1] - '0';
+		}
+		else
+		{
+			LOG_ERROR("Format Error");
+			break;
+		}
+
+		LOG_INFO("day: " << Day << "; time: " << L << "-" << R);
+
+		if (choice == 1)
+		{
+			for (size_t i = start_week; i <= end_week; ++i)
+				for (size_t j = L; j <= R; ++j)
+					if (timetable[i][Day][j]) return false;
+					else timetable[i][Day][j] = true;
+		}
+		else if (choice == 0)
+		{
+			for (size_t i = start_week; i <= end_week; ++i)
+				for (size_t j = L; j <= R; ++j)
+					timetable[i][Day][j] = false;
+		}
+
+		t = str_v.find(",");
+		if (t != std::string_view::npos) // 后面还有时间
+			str_v = str_v.substr(t + 1);
+		else
+			break;
+
+	} while (str_v.size() > 0);
+
+	return true;
+}
+
 void HttpConnection::InstructorRequest()
 {
 	switch (_request.method())
@@ -633,15 +696,16 @@ void HttpConnection::InstructorRequest()
 			SetBadRequest("ParseUserData error");
 			return;
 		}
-
+		// 录入成绩
 		if (_request.target() == "/api/teacher_scoreIn/enter")
 		{
-			uint32_t student_id = stoi(recv["student_id"].asString());
-			uint32_t section_id = stoi(recv["section_id"].asString());
-			uint32_t score = stoi(recv["score"].asString());
+			auto student_id = stoi(recv["student_id"].asString());
+			auto section_id = stoi(recv["section_id"].asString());
+			auto score = recv["score"].asDouble();
 			LogicSystem::Instance().PushToQue([=, this, self = shared_from_this()]() {
 				_instructorHandler.post_grades(self, student_id, section_id, score); });
 		}
+		// 个人信息修改
 		else if (_request.target() == "/api/teacher_infoCheck/submit")
 		{
 			auto college = recv["college"].asString();
@@ -661,7 +725,7 @@ void HttpConnection::InstructorRequest()
 			if (!ok)
 				return;
 
-			// 也可选择交给当前线程处理，这里交给逻辑线程处理recv
+			// 交给当前线程处理
 			LogicSystem::Instance().PushToQue(
 				[
 					college = std::move(college),
@@ -825,9 +889,7 @@ void HttpConnection::AdminRequest()
 		else
 		{
 			SetBadRequest("AdminRequest Wrong");
-		}
-			
-
+		}	
 		break;
 	}
 	case beast::http::verb::post:
@@ -848,7 +910,7 @@ void HttpConnection::AdminRequest()
 				{
 					std::vector<uint32_t> user_id;
 					std::vector<std::string> role;
-					Json::Value deleteInfo = recv["deleteInfo"];
+					auto& deleteInfo = recv["deleteInfo"];
 					for (const auto& item : deleteInfo)
 					{
 						user_id.push_back(stoi(item["user_id"].asString()));
@@ -923,15 +985,14 @@ void HttpConnection::AdminRequest()
 			else
 				SetBadRequest("Role was not teacher or student");
 		}
-
 		// 增加某些课程
 		else if (target == "/api/admin_courseManage/newCourse")
 		{
-			Json::Value courseData = recv["courseData"];
+			auto& courseData = recv["courseData"];
 			// 提取公共部分
 			auto semester		= courseData["semester"].asString();
 			auto teacher_id		= courseData["teacher_id"].asUInt();
-			auto schedule		= courseData["schedule"]; // Json::Value
+			auto& schedule		= courseData["schedule"]; // Json::Value
 			auto max_capacity	= courseData["max_capacity"].asUInt();
 			auto startWeek		= courseData["startWeek"].asUInt();
 			auto endWeek		= courseData["endWeek"].asUInt();
@@ -953,6 +1014,37 @@ void HttpConnection::AdminRequest()
 			else
 				ok = true;
 			if (!ok) return;
+
+			memset(timetable, 0, sizeof timetable); // ok
+			mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
+			sess.getSchema("scut_sims");
+			// 教授时间冲突
+			// 获取当前学期的课表
+			mysqlx::RowResult result = sess.sql(
+				"SELECT start_week, end_week, time_slot"
+				"FROM instructors i"
+				"JOIN sections s USING(instructor_id)"
+				"JOIN semesters sm USING(semester_id)"
+				"WHERE instructor_id = 1 AND"
+				"sm.`year` = YEAR(NOW()) AND"
+				"DATE(NOW()) >= DATE_SUB(sm.start_date, INTERVAL 6 MONTH)"
+				"AND DATE(NOW()) <= sm.end_date;"
+			).bind(teacher_id).execute();
+			sess.close();
+
+			// 处理已有的课程
+			for (auto row : result)
+			{
+				ProcessRow(row, 1);
+			}
+
+			ok = ProcessRow(startWeek, endWeek, schedule_str, 1);
+
+			if (!ok)
+			{
+				SetBadRequest("Course Time Conflict");
+				return;
+			}
 
 			if (courseData["course_id"].asString().length() == 0) // 新课程
 			{
@@ -1012,7 +1104,7 @@ void HttpConnection::AdminRequest()
 		// 修改课程信息
 		else if (target == "/api/admin_courseManage/changeCourse")
 		{
-			Json::Value courseData = recv["courseData"];
+			auto& courseData = recv["courseData"];
 			auto section_id = courseData["section_id"].asUInt();
 			auto teacher_id = courseData["teacher_id"].asUInt();
 			auto schedule = courseData["schedule"];
@@ -1031,6 +1123,50 @@ void HttpConnection::AdminRequest()
 				SetBadRequest("location.length() <= 4 || location.length() > 100");
 			else
 				ok = true;
+
+			memset(timetable, 0, sizeof timetable); // ok
+			mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
+			sess.getSchema("scut_sims");
+			// 教授时间冲突
+			// 获取当前学期的课表
+			mysqlx::RowResult result = sess.sql(
+				"SELECT start_week, end_week, time_slot"
+				"FROM instructors i"
+				"JOIN sections s USING(instructor_id)"
+				"JOIN semesters sm USING(semester_id)"
+				"WHERE instructor_id = 1 AND"
+				"sm.`year` = YEAR(NOW()) AND"
+				"DATE(NOW()) >= DATE_SUB(sm.start_date, INTERVAL 6 MONTH)"
+				"AND DATE(NOW()) <= sm.end_date;"
+			).bind(teacher_id).execute();
+
+			// 要去掉原本的课程安排
+			auto row = sess.sql(
+				"SELECT start_week, end_week, time_slot"
+				"FROM sections "
+				"WHERE section_id = ?;"
+			).bind(section_id).execute().fetchOne();
+			sess.close();
+
+			auto m_startWeek = row[0].get<uint32_t>();
+			auto m_endWeek = row[1].get<uint32_t>();
+			auto m_timeSlot = row[2].get<std::string>();
+			ProcessRow(m_startWeek, m_endWeek, m_timeSlot, 0);
+
+			// 处理已有的课程
+			for (auto row : result)
+			{
+				ProcessRow(row, 1);
+			}
+			
+
+			ok = ProcessRow(startWeek, endWeek, schedule_str, 1);
+
+			if (!ok)
+			{
+				SetBadRequest("Course Time Conflict");
+				return;
+			}
 
 			LogicSystem::Instance().PushToQue(
 				[
@@ -1068,13 +1204,13 @@ void HttpConnection::AdminRequest()
 		if (target == "/api/admin_courseManage/deleteCourse")
 		{
 			std::vector<uint32_t> section_id;
-			Json::Value section = recv["section_id"];
+			auto& section = recv["section_id"];
 			mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 
 			// 检查section_id 是否合法
 			for (const auto& item : section)
 			{
-				size_t id = stoull(item["section_id"].asString());
+				uint32_t id = stoull(item["section_id"].asString());
 				auto row = sess.sql(
 					"SELECT 1 FROM sections sc "
 					"JOIN semesters sm USING (semester_id)"
@@ -1139,9 +1275,8 @@ std::string HttpConnection::ProcessSchedule(const Json::Value& schedule)
 				vtime.substr(3) != GetUTF8ForDatabase(L"节"))
 				return "";
 
-			if (!first) {
+			if (!first) 
 				oss << ",";
-			}
 
 			oss << row["day"].asString() << " " << row["time"].asString();
 			first = false;

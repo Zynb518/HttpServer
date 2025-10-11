@@ -31,8 +31,8 @@ void HttpServer::StartAccept()
 		[this, connection](boost::system::error_code ec) {
 			if (!ec)
 			{
-				LOG_INFO("Accept Success");
-				LOG_INFO("now _mapping's size = " << _mapping.size());
+				LOG_INFO("Accept Success !!! \nnow _mapping's size = " << _mapping.size());
+				LOG_INFO("The thread ID executing ReadLogin is " << std::this_thread::get_id());
 				_mapping[connection->GetUuid()] = connection;
 				connection->ReadLogin();
 			}
