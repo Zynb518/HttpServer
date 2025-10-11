@@ -50,7 +50,12 @@ private:
 	void InstructorRequest();
 	void AdminRequest();
 
+	// ´ø´íÎó´¦Àí
+	std::string ProcessSchedule(const Json::Value& schedule);
+
 	void CloseConnection() noexcept;
+
+
 private:
 	tcp::socket _socket;
 	beast::flat_buffer _buffer;

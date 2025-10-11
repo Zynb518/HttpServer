@@ -1,5 +1,4 @@
 #pragma once
-#define _CRT_SECURE_NO_WARNINGS
 #include <iostream>
 #include <string>
 #include <chrono>
@@ -63,4 +62,6 @@ public:
     static bool isValidPassword(const std::string& password);
     static bool validateAll(const std::string& birthday, const std::string& email,
         const std::string& phone, const std::string& password);
+
+    static bool isValidSemester(const std::string& semester);
 };

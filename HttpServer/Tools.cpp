@@ -61,6 +61,28 @@ bool DataValidator::validateAll(const std::string& birthday, const std::string& 
         isValidPassword(password);
 }
 
+bool DataValidator::isValidSemester(const std::string& semester)
+{
+    // 检查长度
+    if (semester.length() != 7)
+        return false;
+
+    // 检查前两个字符必须是"20"
+    if (semester[0] != '2' || semester[1] != '0')
+        return false;
+
+    // 检查第3、4个字符必须是数字
+    if (!std::isdigit(semester[2]) || !std::isdigit(semester[3]))
+        return false;
+
+    // 检查最后一个字符必须是'春'或'秋'
+    std::string_view t(semester.substr(4));
+    if (t != GetUTF8ForDatabase(L"春") && t != GetUTF8ForDatabase(L"秋"))
+        return false;
+
+    return true;
+}
+
 // DataValidator 私有辅助方法实现
 bool DataValidator::isValidDateValues(int year, int month, int day) {
     // 检查基本范围

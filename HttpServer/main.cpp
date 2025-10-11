@@ -9,6 +9,7 @@
 
 #include "HttpServer.h"
 #include "MysqlConnectionPool.h"
+#include "Tools.h"
 #include "Log.h"
 
 #ifdef _WIN32
@@ -20,7 +21,8 @@ int main()
 #ifdef _WIN32
         system("chcp 65001 > nul");
 #endif
-
+        std::string s = GetUTF8ForDatabase(L"2025春");
+        std::cout << s.size();
 
         boost::asio::io_context ioc;
         HttpServer server(ioc, 10086);

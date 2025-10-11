@@ -5,6 +5,9 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <iostream>
+#include <algorithm>
+#include <sstream>
+#include <unordered_set>
 #include "Log.h"
 #include "Tools.h"
 
@@ -345,6 +348,13 @@ void HttpConnection::StudentRequest()
 		{
 			constexpr size_t len = sizeof("/api/student_tableCheck/ask?semester=") - 1;
 			std::string str(_request.target().substr(len));
+
+			if (!DataValidator::isValidSemester(str))
+			{
+				SetBadRequest("Semester Format Wrong!");
+				return;
+			}
+
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), str = std::move(str)]() {
 				_studentHandler.get_schedule(self, _user_id, str); });
 		}
@@ -579,6 +589,13 @@ void HttpConnection::InstructorRequest()
 		{
 			constexpr size_t len = sizeof("/api/teacher_tableCheck/ask?semester=") - 1;
 			std::string str(_request.target().substr(len));
+
+			if (!DataValidator::isValidSemester(str))
+			{
+				SetBadRequest("Semester Format Wrong!");
+				return;
+			}
+
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), str = std::move(str)]() {
 				_instructorHandler.get_teaching_sections(self, _user_id, str); });
 		}
@@ -733,6 +750,13 @@ void HttpConnection::AdminRequest()
 			pos_sem += sizeof("&semester=") - 1;
 			std::string str_sem(target.substr(pos_sem));
 			uint32_t user_id = stoi(std::string(strv_id));
+
+			if (!DataValidator::isValidSemester(str_sem))
+			{
+				SetBadRequest("Semester Format Wrong!");
+				return;
+			}
+
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), user_id, seme = std::move(str_sem)]()
 				{
 					_adminHandler.get_student_grades(self, user_id, seme);
@@ -754,6 +778,13 @@ void HttpConnection::AdminRequest()
 			pos_sem += sizeof("&semester=") - 1;
 			std::string str_sem(target.substr(pos_sem));
 			uint32_t user_id = stoi(std::string(strv_id));
+
+			if (!DataValidator::isValidSemester(str_sem))
+			{
+				SetBadRequest("Semester Format Wrong!");
+				return;
+			}
+
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), user_id, seme = std::move(str_sem)]()
 				{
 					_adminHandler.get_instructor_grades(self, user_id, seme);
@@ -779,6 +810,7 @@ void HttpConnection::AdminRequest()
 					_adminHandler.get_college_courses(self, college_id);
 				});
 		}
+		// 获取所有老师
 		else if(target.substr(0, sizeof("/api/admin/general/getCollegeTeacher?college_id=") - 1) ==
 			"/api/admin/general/getCollegeTeacher?college_id=")
 		{
@@ -822,81 +854,196 @@ void HttpConnection::AdminRequest()
 						user_id.push_back(stoi(item["user_id"].asString()));
 						role.push_back(item["role"].asString());
 					}
+			
+					for (const auto& item : role)
+					{
+						if (item != "student" || item != "teacher")
+							SetBadRequest("delete Account Role error");
+					}
 					_adminHandler.del_someone(self, user_id, role);
 				});
 		// 3. 增加某个账号
 		else if (target == "/api/admin_accountManage/new")
-			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), recv]()
-				{
-					auto role = recv["role"].asString();
-					if (role == "student")
+		{
+			auto role = recv["role"].asString();
+
+			if (role == "student")
+			{
+				auto name = recv["name"].asString();
+				auto gender = recv["gender"].asString();
+				auto grade = recv["grade"].asUInt();
+				auto major_id = stoi(recv["major_id"].asString());
+				auto college_id = recv["college_id"].asUInt();
+				
+				bool ok = false;
+				if (name.length() == 0 || name.length() > 50)
+					SetBadRequest("Name too long or Zero");
+				else if (gender != GetUTF8ForDatabase(L"男") || gender != GetUTF8ForDatabase(L"女"))
+					SetBadRequest("Gender Error");
+				else if(grade < 2000 || grade > 2100)
+					SetBadRequest("Grade Error");
+				else
+					ok = true;
+
+				if (!ok) return;
+
+				LogicSystem::Instance().PushToQue(
+					[
+						=, name = std::move(name),
+						gender = std::move(gender),
+						this, self = shared_from_this()
+					]()
 					{
 						_adminHandler.add_student(self,
-							recv["name"].asString(),
-							recv["gender"].asString(),
-							recv["grade"].asUInt(),
-							stoi(recv["major_id"].asString()),
-							recv["college_id"].asUInt());
-					}
-					else if (role == "teacher")
+							name, gender, grade, major_id, college_id);
+							
+					});
+				
+			}
+			else if (role == "teacher")
+			{
+				auto name = recv["name"].asString();
+				if(name.length() == 0 || name.length() > 50)
+				{
+					SetBadRequest("Name too long or Zero");
+					return;
+				}
+
+				auto college_id = stoi(recv["college_id"].asString());
+				LogicSystem::Instance().PushToQue(
+					[ =, name = std::move(name),
+					  this, self = shared_from_this() ]()
 					{
 						_adminHandler.add_instructor(self,
-							recv["name"].asString(),
-							stoi(recv["college_id"].asString()));
-					}
-					else
-						SetBadRequest("Role was not teacher or student");
+							name, college_id);
 
-				});
+					});
+
+			}
+			else
+				SetBadRequest("Role was not teacher or student");
+		}
+
+		// 增加某些课程
 		else if (target == "/api/admin_courseManage/newCourse")
 		{
 			Json::Value courseData = recv["courseData"];
+			// 提取公共部分
+			auto semester		= courseData["semester"].asString();
+			auto teacher_id		= courseData["teacher_id"].asUInt();
+			auto schedule		= courseData["schedule"]; // Json::Value
+			auto max_capacity	= courseData["max_capacity"].asUInt();
+			auto startWeek		= courseData["startWeek"].asUInt();
+			auto endWeek		= courseData["endWeek"].asUInt();
+			auto location		= courseData["location"].asString();
+
+			std::string schedule_str = ProcessSchedule(schedule);
+			// 检验公共部分
+			bool ok = false;
+			if (!DataValidator::isValidSemester(semester))
+				SetBadRequest("Semester Format Error");
+			else if (schedule_str.length() == 0)
+				SetBadRequest("Schedule Format Error");
+			else if (max_capacity < 30 || max_capacity > 150)
+				SetBadRequest("max_capacity < 30 || max_capacity > 150");
+			else if (startWeek == 0 || startWeek > 20 || endWeek == 0 || endWeek > 20 || startWeek > endWeek)
+				SetBadRequest("startWeek or endWeek Error");
+			else if (location.length() <= 4 || location.length() > 100)
+				SetBadRequest("location.length() <= 4 || location.length() > 100");
+			else
+				ok = true;
+			if (!ok) return;
+
 			if (courseData["course_id"].asString().length() == 0) // 新课程
 			{
-				LogicSystem::Instance().PushToQue([this, self = shared_from_this(), courseData]()
+				auto college_id		= courseData["college_id"].asUInt();
+				auto course_name	= courseData["course_name"].asString();
+				auto credit			= courseData["credit"].asUInt();
+				auto type			= courseData["type"].asString();
+
+				std::transform(type.begin(), type.end(), type.begin(), ::toupper);
+
+				if (course_name.length() == 0 || course_name.length() > 100)
+					SetBadRequest("Course Name Too Long");
+				else if (credit == 0 || credit > 7)
+					SetBadRequest("Credit == 0 Or Credit > 7");
+				else if (type != "GENERAL REQUIRED" || type != "MAJOR REQUIRED" || type != "MAJOR ELECTIVE" ||
+					type != "UNIVERSITY ELECTIVE" || type != "PRACTICAL")
+					SetBadRequest("Type Error");
+				else 
+					ok = true;
+
+				if (!ok) return;
+
+				LogicSystem::Instance().PushToQue(
+					[
+						=, 
+						course_name = std::move(course_name), type = std::move(type), 
+						semester = std::move(semester), schedule = std::move(schedule_str), 
+						location = std::move(location),
+						this, self = shared_from_this()
+					]()
 					{
-						_adminHandler.add_section_new(self,
-							courseData["college_id"].asUInt(),
-							courseData["course_name"].asString(),
-							courseData["credit"].asUInt(),
-							courseData["type"].asString(),
-							courseData["semester"].asString(),
-							courseData["teacher_id"].asUInt(),
-							courseData["schedule"].asString(),
-							courseData["max_capacity"].asUInt(),
-							courseData["startWeek"].asUInt(),
-							courseData["endWeek"].asUInt(),
-							courseData["location"].asString());
+						_adminHandler.add_section_new(self, college_id, course_name, credit,
+							type, semester, teacher_id, schedule, max_capacity,
+							startWeek, endWeek, location);
+							
 					});
 			}
 			else
 			{
-				LogicSystem::Instance().PushToQue([this, self = shared_from_this(), courseData]()
+				auto course_id = courseData["course_id"].asUInt();
+				LogicSystem::Instance().PushToQue(
+					[
+						=,
+						semester = std::move(semester), schedule = std::move(schedule_str), 
+						location = std::move(location),
+						this, self = shared_from_this()
+					]()
 					{
 						_adminHandler.add_section_old(self,
-							courseData["course_id"].asUInt(),
-							courseData["semester"].asString(),
-							courseData["teacher_id"].asUInt(),
-							courseData["schedule"].asString(),
-							courseData["max_capacity"].asUInt(),
-							courseData["startWeek"].asUInt(),
-							courseData["endWeek"].asUInt(),
-							courseData["location"].asString());
+							course_id, semester,
+							teacher_id, schedule,
+							max_capacity, startWeek,
+							endWeek, location);
 					});
 			}
 		}
+		// 修改课程信息
 		else if (target == "/api/admin_courseManage/changeCourse")
 		{
 			Json::Value courseData = recv["courseData"];
-			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), courseData]()
+			auto section_id = courseData["section_id"].asUInt();
+			auto teacher_id = courseData["teacher_id"].asUInt();
+			auto schedule = courseData["schedule"];
+			auto startWeek = courseData["startWeek"].asUInt();
+			auto endWeek = courseData["endWeek"].asUInt();
+			auto location = courseData["location"].asString();
+
+			auto schedule_str = ProcessSchedule(schedule);
+
+			bool ok = false;
+			if (schedule_str.length() == 0)
+				SetBadRequest("Schedule Format Error");
+			else if (startWeek == 0 || startWeek > 20 || endWeek == 0 || endWeek > 20 || startWeek > endWeek)
+				SetBadRequest("startWeek or endWeek Error");
+			else if (location.length() <= 4 || location.length() > 100)
+				SetBadRequest("location.length() <= 4 || location.length() > 100");
+			else
+				ok = true;
+
+			LogicSystem::Instance().PushToQue(
+				[
+					=,
+					schedule = std::move(schedule_str),
+					location = std::move(location),
+					this, self = shared_from_this()
+				]()
 				{
 					_adminHandler.modify_section(self,
-						courseData["section_id"].asUInt(),
-						courseData["teacher_id"].asUInt(),
-						courseData["schedule"].asString(),
-						courseData["startWeek"].asUInt(),
-						courseData["endWeek"].asUInt(),
-						courseData["location"].asString());
+						section_id, teacher_id,
+						schedule, startWeek,
+						endWeek, location);
 				});
 		}
 		else
@@ -920,14 +1067,30 @@ void HttpConnection::AdminRequest()
 		// 5.删除某些课程/api/admin_courseManage/deleteCourse
 		if (target == "/api/admin_courseManage/deleteCourse")
 		{
-			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), recv]()
+			std::vector<uint32_t> section_id;
+			Json::Value section = recv["section_id"];
+			mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
+
+			// 检查section_id 是否合法
+			for (const auto& item : section)
+			{
+				size_t id = stoull(item["section_id"].asString());
+				auto row = sess.sql(
+					"SELECT 1 FROM sections sc "
+					"JOIN semesters sm USING (semester_id)"
+					"WHERE sc.section_id = ? AND "
+					"sm.`year` = YEAR(NOW()) AND "
+					"MONTH(sm.start_date) >= IF(MONTH(NOW()) >= 7, 7, 0);")
+					.bind(id).execute().fetchOne();
+
+				if (row.isNull())
+					SetBadRequest("section_id error: id is " + std::to_string(id));
+				else
+					section_id.push_back(id);
+			}
+
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), section_id = std::move(section_id)]()
 				{
-					std::vector<uint32_t> section_id;
-					Json::Value section = recv["section_id"];
-					for (const auto& item : section)
-					{
-						section_id.push_back(stoi(item["section_id"].asString()));
-					}
 					_adminHandler.del_section(self, section_id);
 				});
 		}
@@ -941,6 +1104,52 @@ void HttpConnection::AdminRequest()
 		SetBadRequest("AdminRequest Wrong Method");
 		break;
 	}
+}
+
+
+std::string HttpConnection::ProcessSchedule(const Json::Value& schedule)
+{
+	if (!schedule.isArray()) {
+		return "";
+	}
+
+	std::ostringstream oss;
+	bool first = true;
+
+	static std::unordered_set<std::string> validDays = {
+		GetUTF8ForDatabase(L"周一"), GetUTF8ForDatabase(L"周二"),
+		GetUTF8ForDatabase(L"周三"), GetUTF8ForDatabase(L"周四"),
+		GetUTF8ForDatabase(L"周五"), GetUTF8ForDatabase(L"周六"),
+		GetUTF8ForDatabase(L"周日"),
+	};
+
+	for (auto& row : schedule)
+	{
+		if (row.isObject() &&
+			row.isMember("day") && row["day"].isString() &&
+			row.isMember("time") && row["time"].isString())
+		{
+			auto day = row["day"].asString();
+			auto time = row["time"].asString();
+			if (validDays.find(day) == validDays.end())
+				return "";
+
+			std::string_view vtime = time;
+			if (vtime.length() != 7 || vtime[1] != '-' || !std::isdigit(vtime[0]) || !std::isdigit(vtime[2]) ||
+				vtime.substr(3) != GetUTF8ForDatabase(L"节"))
+				return "";
+
+			if (!first) {
+				oss << ",";
+			}
+
+			oss << row["day"].asString() << " " << row["time"].asString();
+			first = false;
+		}
+		else
+			return "";
+	}
+	return oss.str();
 }
 
 void HttpConnection::CloseConnection() noexcept
