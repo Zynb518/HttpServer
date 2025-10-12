@@ -1,9 +1,10 @@
 #include "IOServicePool.h"
 #include <iostream>
+#include "Log.h"
 
 IOServicePool::~IOServicePool()
 {
-    std::cout << "IOServicePool Destruct" << std::endl;
+    LOG_INFO("IOServicePool Destruct");
     // 1. 重置 work guards (允许 io_context 退出 run() 循环)
     for (auto& guard : _workGuards) {
         guard.reset();  // 这会释放工作保护

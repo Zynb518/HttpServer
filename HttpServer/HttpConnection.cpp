@@ -191,8 +191,8 @@ bool HttpConnection::UserExists(uint32_t user_id, const std::string& password, c
 	try {
 		// 获取 users 表
 		// mysqlx::Session sess = MySQLConnectionPool::Instance().GetSession();
-		mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-		mysqlx::Table users = sess.getSchema("scut_sims").getTable("users");
+		auto sess = MysqlConnectionPool::Instance().GetSession();
+		auto users = sess.getSchema("scut_sims").getTable("users");
 
 		// 构建查询条件 - 使用主键(user_id, role)和密码进行匹配
 		auto result = users.select("user_id")
@@ -253,10 +253,9 @@ void HttpConnection::WriteBadResponse() noexcept
 		[self = shared_from_this()](beast::error_code ec, size_t) {
 			if (ec)
 			{
-				std::cout << "WriteBadResponse async_write error is "
-					<< ec.what();
+				LOG_ERROR("WriteBadResponse async_write error is "<< ec.what());
 			}
-			// self->CloseConnection();
+			LOG_INFO("WriteBadResponse()");
 		}
 	);
 }
@@ -407,23 +406,11 @@ void HttpConnection::StudentRequest()
 			uint32_t section_id = stoi(recv["section_id"].asString());
 
 			Json::Value root;
-			// 2.人数冲突
-			mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-			mysqlx::Table sections = sess.getSchema("scut_sims").getTable("sections");
-			auto row = sections.select("1").where("section_id = :sid AND `number` < max_capacity")
-				.bind("sid", section_id)
-				.execute().fetchOne();
-
-			if (row.isNull())
-			{
-				SetBadRequest("Section Full");
-				return;
-			}
-
-			// 3.选课时间冲突
+			// 选课时间冲突
 
 			memset(timetable, 0, sizeof timetable); // ok
-
+			mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
+			sess.getSchema("scut_sims");
 			// 处理已经选的课程
 			mysqlx::RowResult result = sess.sql(
 				"SELECT s.start_week, s.end_week, s.time_slot "
@@ -437,7 +424,8 @@ void HttpConnection::StudentRequest()
 				ProcessRow(row, 1);
 			}
 
-			row = sess.sql(
+			// 处理即将要选的课程
+			auto row = sess.sql(
 				"SELECT start_week, end_week, time_slot"
 				"FROM sections s"
 				"WHERE section_id = ?;"
@@ -451,6 +439,18 @@ void HttpConnection::StudentRequest()
 			}
 
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), section_id]() {
+				// 2.人数冲突 必须放在队列里进行判断
+				mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
+				mysqlx::Table sections = sess.getSchema("scut_sims").getTable("sections");
+				auto row = sections.select("1").where("section_id = :sid AND `number` < max_capacity")
+					.bind("sid", section_id)
+					.execute().fetchOne();
+
+				if (row.isNull())
+				{
+					SetBadRequest("Section Full");
+					return;
+				} 
 				_studentHandler.register_course(self, _user_id, section_id); });
 		}
 		// 退课
@@ -472,11 +472,11 @@ void HttpConnection::StudentRequest()
 			if (!DataValidator::isValidDate(birthday))
 				SetBadRequest("birthday error");
 			else if (!DataValidator::isValidEmail(email))
-				SetBadRequest("birthday error");
+				SetBadRequest("email error");
 			else if (!DataValidator::isValidPhone(phone))
-				SetBadRequest("birthday error");
+				SetBadRequest("phone error");
 			else if (!DataValidator::isValidPassword(password))
-				SetBadRequest("birthday error");
+				SetBadRequest("password error");
 			else
 				ok = true;
 
@@ -702,6 +702,12 @@ void HttpConnection::InstructorRequest()
 			auto student_id = stoi(recv["student_id"].asString());
 			auto section_id = stoi(recv["section_id"].asString());
 			auto score = recv["score"].asDouble();
+			if(score < 0 || score > 100)
+			{
+				SetBadRequest("Score Range Error");
+				return;
+			}
+
 			LogicSystem::Instance().PushToQue([=, this, self = shared_from_this()]() {
 				_instructorHandler.post_grades(self, student_id, section_id, score); });
 		}
@@ -781,6 +787,12 @@ void HttpConnection::AdminRequest()
 		{
 			constexpr size_t len = sizeof("/api/admin_courseManage/getAllCourse?semester=") - 1;
 			std::string semester(target.substr(len));
+			if (!DataValidator::isValidSemester(semester))
+			{
+				SetBadRequest("Semester Format Wrong!");
+				return;
+			}
+
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), seme = std::move(semester)]()
 				{
 					_adminHandler.get_sections(self, seme);
@@ -791,8 +803,7 @@ void HttpConnection::AdminRequest()
 			"/api/admin_scoreCheck/course?section_id=")
 		{
 			constexpr size_t len = sizeof("/api/admin_scoreCheck/course?section_id=") - 1;
-			std::string str(target.substr(len));
-			uint32_t section_id = stoi(str);
+			uint32_t section_id = stoi( std::string(target.substr(len)) );
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), section_id]()
 				{
 					_adminHandler.view_grade_statistics(self, section_id);
@@ -921,6 +932,7 @@ void HttpConnection::AdminRequest()
 					{
 						if (item != "student" || item != "teacher")
 							SetBadRequest("delete Account Role error");
+						return;
 					}
 					_adminHandler.del_someone(self, user_id, role);
 				});
@@ -937,10 +949,13 @@ void HttpConnection::AdminRequest()
 				auto major_id = stoi(recv["major_id"].asString());
 				auto college_id = recv["college_id"].asUInt();
 				
+				static const auto man = GetUTF8ForDatabase(L"男");
+				static const auto woman = GetUTF8ForDatabase(L"女");
+
 				bool ok = false;
 				if (name.length() == 0 || name.length() > 50)
 					SetBadRequest("Name too long or Zero");
-				else if (gender != GetUTF8ForDatabase(L"男") || gender != GetUTF8ForDatabase(L"女"))
+				else if (gender != man || gender != woman)
 					SetBadRequest("Gender Error");
 				else if(grade < 2000 || grade > 2100)
 					SetBadRequest("Grade Error");

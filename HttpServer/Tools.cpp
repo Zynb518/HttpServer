@@ -75,9 +75,11 @@ bool DataValidator::isValidSemester(const std::string& semester)
     if (!std::isdigit(semester[2]) || !std::isdigit(semester[3]))
         return false;
 
+	static const std::string spring = GetUTF8ForDatabase(L"春");
+	static const std::string autumn = GetUTF8ForDatabase(L"秋");
     // 检查最后一个字符必须是'春'或'秋'
     std::string_view t(semester.substr(4));
-    if (t != GetUTF8ForDatabase(L"春") && t != GetUTF8ForDatabase(L"秋"))
+    if (t != spring && t != autumn)
         return false;
 
     return true;

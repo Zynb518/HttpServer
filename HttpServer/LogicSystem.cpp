@@ -28,14 +28,23 @@ void LogicSystem::WorkFunc()
 	}
 	catch (const std::exception& e)
 	{
-		LOG_ERROR("LogicSystem WorkFunc Exception is " << e.what());
+		LOG_ERROR("LogicSystem WorkFunc Exception: " << e.what());
+		// 考虑是否需要重新启动工作线程
+	}
+	catch (...)
+	{
+		LOG_ERROR("LogicSystem WorkFunc Unknown Exception");
 	}
 	
 }
 
 void LogicSystem::Stop() noexcept
 {
-	_stop = true;
+	{
+		std::lock_guard<std::mutex> lock(_mutex);
+		_stop = true;
+	}
+	_conVar.notify_one();  // 确保工作线程能立即响应停止
 }
 
 LogicSystem::LogicSystem() noexcept
