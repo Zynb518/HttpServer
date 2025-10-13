@@ -63,5 +63,8 @@ public:
     static bool validateAll(const std::string& birthday, const std::string& email,
         const std::string& phone, const std::string& password);
 
-    static bool isValidSemester(const std::string& semester);
+    // 学期格式是否正确
+    static bool isValidSemester(const std::string& semester); 
+    // 用户是否存在 
+    static bool isUserExists(uint32_t user_id, const std::string& password, const std::string& role); 
 };

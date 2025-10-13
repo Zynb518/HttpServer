@@ -45,27 +45,11 @@ beast::http::response<beast::http::dynamic_body>& HttpConnection::GetResponse() 
 	return _response;
 }
 
-void HttpConnection::StartWrite()
-{
-	LOG_INFO("After StartWrite response\n" << _response);
-	beast::http::async_write(_socket, _response,
-		[this, self = shared_from_this()](beast::error_code ec, size_t) {
-			if (ec)
-			{
-				LOG_ERROR("HttpConnection async_write error is " << ec.what());
-				LOG_ERROR("CloseConnection");
-				CloseConnection();
-				return;
-			}
-			StartRead();
-		});
-}
-
 void HttpConnection::ReadLogin()
 {
 	LOG_INFO("Start ReadLogin");
 	beast::http::async_read(_socket, _buffer, _request,
-		[this, self = shared_from_this() ](beast::error_code ec, size_t bytes_transferred) {
+		[this, self = shared_from_this()](beast::error_code ec, size_t bytes_transferred) {
 			boost::ignore_unused(bytes_transferred);
 			if (!ec)
 			{
@@ -73,7 +57,7 @@ void HttpConnection::ReadLogin()
 				LOG_INFO("The ThreadID executing HandleLogin is " << std::this_thread::get_id());
 				if (!HandleLogin())
 				{
-					SetBadRequest("Login-Failure");
+					SetUnProcessableEntity("Login-Failure");
 					ReadLogin();
 				}
 			}
@@ -87,6 +71,24 @@ void HttpConnection::ReadLogin()
 
 	// StartTimer();
 }
+
+void HttpConnection::StartWrite()
+{
+	LOG_INFO("After StartWrite response\n" << _response);
+	_response.prepare_payload();
+	beast::http::async_write(_socket, _response,
+		[this, self = shared_from_this()](beast::error_code ec, size_t) {
+			if (ec)
+			{
+				LOG_ERROR("HttpConnection async_write error is " << ec.what());
+				LOG_ERROR("CloseConnection");
+				CloseConnection();
+				return;
+			}
+			StartRead();
+		});
+}
+
 
 void HttpConnection::StartTimer()
 {
@@ -148,7 +150,7 @@ bool HttpConnection::HandleLogin()
 			_role = _role == "teacher" ? "instructor" : _role;
 			_role = _role == "admin" ? "administer" : _role;
 
-			if (!UserExists(_user_id, _password, _role))
+			if (!DataValidator::isUserExists(_user_id, _password, _role))
 			{
 				// 用户不存在
 				LOG_INFO("User Not Exist");
@@ -161,7 +163,7 @@ bool HttpConnection::HandleLogin()
 			send["id"] = _user_id;
 			send["user_id"] = _user_id;	
 			beast::ostream(_response.body()) << Json::writeString(_writerBuilder, send);
-			WriteLoginSuccess();
+			StartWrite();
 			return true;
 		}
 		LOG_INFO("Not Login Request"); // 不符合登陆请求格式
@@ -186,31 +188,6 @@ bool HttpConnection::ParseUserData(const std::string& body, Json::Value& recv)
 	return true;
 }
 
-bool HttpConnection::UserExists(uint32_t user_id, const std::string& password, const std::string& role)
-{
-	try {
-		// 获取 users 表
-		// mysqlx::Session sess = MySQLConnectionPool::Instance().GetSession();
-		auto sess = MysqlConnectionPool::Instance().GetSession();
-		auto users = sess.getSchema("scut_sims").getTable("users");
-
-		// 构建查询条件 - 使用主键(user_id, role)和密码进行匹配
-		auto result = users.select("user_id")
-			.where("user_id = :uid AND password = :pwd AND role = :r")
-			.bind("uid", user_id)
-			.bind("pwd", password)
-			.bind("r", role)  // 只需要检查是否存在，限制返回1条记录
-			.execute();
-		sess.close();
-		// 检查是否有结果
-		return result.count() > 0;
-	}
-	catch (const mysqlx::Error& err) {
-		LOG_DEBUG("Database Error: " << err.what());
-		return false;
-	}
-}
-
 void HttpConnection::SetBadRequest() noexcept
 {
 	// 设置状态码
@@ -223,7 +200,7 @@ void HttpConnection::SetBadRequest() noexcept
 	WriteBadResponse();
 }
 
-void HttpConnection::SetBadRequest(Json::Value& message) noexcept
+void HttpConnection::SetUnProcessableEntity(Json::Value& message) noexcept
 {
 	// 设置状态码: 字段值不符合业务
 	_response.result(beast::http::status::unprocessable_entity);
@@ -233,7 +210,7 @@ void HttpConnection::SetBadRequest(Json::Value& message) noexcept
 	WriteBadResponse();
 }
 
-void HttpConnection::SetBadRequest(const std::string& reason) noexcept
+void HttpConnection::SetUnProcessableEntity(const std::string& reason) noexcept
 {
 	// 设置状态码: 字段值不符合业务
 	LOG_ERROR(reason);
@@ -258,14 +235,6 @@ void HttpConnection::WriteBadResponse() noexcept
 			LOG_INFO("WriteBadResponse()");
 		}
 	);
-}
-
-void HttpConnection::WriteLoginSuccess()
-{
-	_response.prepare_payload();
-	// 注意time_wait
-	beast::http::write(_socket, _response);
-	StartRead();
 }
 
 void HttpConnection::StartRead()
@@ -361,7 +330,7 @@ void HttpConnection::StudentRequest()
 
 			if (!DataValidator::isValidSemester(str))
 			{
-				SetBadRequest("Semester Format Wrong!");
+				SetUnProcessableEntity("Semester Format Wrong!");
 				return;
 			}
 
@@ -383,7 +352,7 @@ void HttpConnection::StudentRequest()
 		else
 		{
 			LOG_ERROR("StudentRequest Wrong");
-			SetBadRequest("StudentRequest Wrong");
+			SetUnProcessableEntity("StudentRequest Wrong");
 		}
 			
 		break;
@@ -396,7 +365,7 @@ void HttpConnection::StudentRequest()
 		if (!ParseUserData(body_str, recv))
 		{
 			// 解析失败
-			SetBadRequest("ParseUserData error");
+			SetUnProcessableEntity("ParseUserData error");
 			return;
 		}
 
@@ -434,7 +403,7 @@ void HttpConnection::StudentRequest()
 			bool ok = ProcessRow(row, 0);
 			if (!ok)
 			{
-				SetBadRequest("Course Time Conflict");
+				SetUnProcessableEntity("Course Time Conflict");
 				return;
 			}
 
@@ -448,7 +417,7 @@ void HttpConnection::StudentRequest()
 
 				if (row.isNull())
 				{
-					SetBadRequest("Section Full");
+					SetUnProcessableEntity("Section Full");
 					return;
 				} 
 				_studentHandler.register_course(self, _user_id, section_id); });
@@ -470,13 +439,13 @@ void HttpConnection::StudentRequest()
 
 			bool ok = false;
 			if (!DataValidator::isValidDate(birthday))
-				SetBadRequest("birthday error");
+				SetUnProcessableEntity("birthday error");
 			else if (!DataValidator::isValidEmail(email))
-				SetBadRequest("email error");
+				SetUnProcessableEntity("email error");
 			else if (!DataValidator::isValidPhone(phone))
-				SetBadRequest("phone error");
+				SetUnProcessableEntity("phone error");
 			else if (!DataValidator::isValidPassword(password))
-				SetBadRequest("password error");
+				SetUnProcessableEntity("password error");
 			else
 				ok = true;
 
@@ -494,13 +463,13 @@ void HttpConnection::StudentRequest()
 		}
 		else
 		{
-			SetBadRequest("StudentRequest Wrong");
+			SetUnProcessableEntity("StudentRequest Wrong");
 		}
 
 		break;
 	}
 	default:
-		SetBadRequest("StudentRequest Wrong Method");
+		SetUnProcessableEntity("StudentRequest Wrong Method");
 		break;
 	}
 }
@@ -655,7 +624,7 @@ void HttpConnection::InstructorRequest()
 
 			if (!DataValidator::isValidSemester(str))
 			{
-				SetBadRequest("Semester Format Wrong!");
+				SetUnProcessableEntity("Semester Format Wrong!");
 				return;
 			}
 
@@ -680,7 +649,7 @@ void HttpConnection::InstructorRequest()
 		}
 		else
 		{
-			SetBadRequest("InstructorRequest Wrong");
+			SetUnProcessableEntity("InstructorRequest Wrong");
 		}
 			
 		break;
@@ -693,7 +662,7 @@ void HttpConnection::InstructorRequest()
 		if (!ParseUserData(body_str, recv))
 		{
 			// 解析失败
-			SetBadRequest("ParseUserData error");
+			SetUnProcessableEntity("ParseUserData error");
 			return;
 		}
 		// 录入成绩
@@ -704,7 +673,7 @@ void HttpConnection::InstructorRequest()
 			auto score = recv["score"].asDouble();
 			if(score < 0 || score > 100)
 			{
-				SetBadRequest("Score Range Error");
+				SetUnProcessableEntity("Score Range Error");
 				return;
 			}
 
@@ -721,11 +690,11 @@ void HttpConnection::InstructorRequest()
 
 			bool ok = false;
 			if (!DataValidator::isValidEmail(email))
-				SetBadRequest("Email Error");
+				SetUnProcessableEntity("Email Error");
 			else if (!DataValidator::isValidPhone(phone))
-				SetBadRequest("Phone Error");
+				SetUnProcessableEntity("Phone Error");
 			else if (!DataValidator::isValidPassword(password))
-				SetBadRequest("Password Error");
+				SetUnProcessableEntity("Password Error");
 			else
 				ok = true;
 			if (!ok)
@@ -745,13 +714,13 @@ void HttpConnection::InstructorRequest()
 		}
 		else
 		{
-			SetBadRequest("InstructorRequest Wrong");
+			SetUnProcessableEntity("InstructorRequest Wrong");
 		}
 
 		break;
 	}
 	default:
-		SetBadRequest("InstructorRequest Wrong Method");
+		SetUnProcessableEntity("InstructorRequest Wrong Method");
 		break;
 	}
 }
@@ -777,7 +746,7 @@ void HttpConnection::AdminRequest()
 					else if (str == "teacher")
 						_adminHandler.get_instructors_info(self);
 					else
-						SetBadRequest("role is not student or teacher");
+						SetUnProcessableEntity("role is not student or teacher");
 
 				});
 		}
@@ -789,7 +758,7 @@ void HttpConnection::AdminRequest()
 			std::string semester(target.substr(len));
 			if (!DataValidator::isValidSemester(semester))
 			{
-				SetBadRequest("Semester Format Wrong!");
+				SetUnProcessableEntity("Semester Format Wrong!");
 				return;
 			}
 
@@ -817,7 +786,7 @@ void HttpConnection::AdminRequest()
 			auto pos_sem = target.find("&semester=");
 			if (pos_id == std::string_view::npos || pos_sem == std::string_view::npos)
 			{
-				SetBadRequest("student_id= &semester= were not founded");
+				SetUnProcessableEntity("student_id= &semester= were not founded");
 				return;
 			}
 			pos_id += sizeof("student_id=") - 1;
@@ -828,7 +797,7 @@ void HttpConnection::AdminRequest()
 
 			if (!DataValidator::isValidSemester(str_sem))
 			{
-				SetBadRequest("Semester Format Wrong!");
+				SetUnProcessableEntity("Semester Format Wrong!");
 				return;
 			}
 
@@ -845,7 +814,7 @@ void HttpConnection::AdminRequest()
 			auto pos_sem = target.find("&semester=");
 			if (pos_id == std::string_view::npos || pos_sem == std::string_view::npos)
 			{
-				SetBadRequest("teacher_id= &semester= were not founded");
+				SetUnProcessableEntity("teacher_id= &semester= were not founded");
 				return;
 			}
 			pos_id += sizeof("teacher_id=") - 1;
@@ -856,7 +825,7 @@ void HttpConnection::AdminRequest()
 
 			if (!DataValidator::isValidSemester(str_sem))
 			{
-				SetBadRequest("Semester Format Wrong!");
+				SetUnProcessableEntity("Semester Format Wrong!");
 				return;
 			}
 
@@ -899,7 +868,7 @@ void HttpConnection::AdminRequest()
 		}
 		else
 		{
-			SetBadRequest("AdminRequest Wrong");
+			SetUnProcessableEntity("AdminRequest Wrong");
 		}	
 		break;
 	}
@@ -911,7 +880,7 @@ void HttpConnection::AdminRequest()
 		if (!ParseUserData(body_str, recv))
 		{
 			// 解析失败
-			SetBadRequest("ParseUserData error");
+			SetUnProcessableEntity("ParseUserData error");
 			return;
 		}
 
@@ -931,7 +900,7 @@ void HttpConnection::AdminRequest()
 					for (const auto& item : role)
 					{
 						if (item != "student" || item != "teacher")
-							SetBadRequest("delete Account Role error");
+							SetUnProcessableEntity("delete Account Role error");
 						return;
 					}
 					_adminHandler.del_someone(self, user_id, role);
@@ -954,11 +923,11 @@ void HttpConnection::AdminRequest()
 
 				bool ok = false;
 				if (name.length() == 0 || name.length() > 50)
-					SetBadRequest("Name too long or Zero");
+					SetUnProcessableEntity("Name too long or Zero");
 				else if (gender != man || gender != woman)
-					SetBadRequest("Gender Error");
+					SetUnProcessableEntity("Gender Error");
 				else if(grade < 2000 || grade > 2100)
-					SetBadRequest("Grade Error");
+					SetUnProcessableEntity("Grade Error");
 				else
 					ok = true;
 
@@ -982,7 +951,7 @@ void HttpConnection::AdminRequest()
 				auto name = recv["name"].asString();
 				if(name.length() == 0 || name.length() > 50)
 				{
-					SetBadRequest("Name too long or Zero");
+					SetUnProcessableEntity("Name too long or Zero");
 					return;
 				}
 
@@ -998,7 +967,7 @@ void HttpConnection::AdminRequest()
 
 			}
 			else
-				SetBadRequest("Role was not teacher or student");
+				SetUnProcessableEntity("Role was not teacher or student");
 		}
 		// 增加某些课程
 		else if (target == "/api/admin_courseManage/newCourse")
@@ -1017,15 +986,15 @@ void HttpConnection::AdminRequest()
 			// 检验公共部分
 			bool ok = false;
 			if (!DataValidator::isValidSemester(semester))
-				SetBadRequest("Semester Format Error");
+				SetUnProcessableEntity("Semester Format Error");
 			else if (schedule_str.length() == 0)
-				SetBadRequest("Schedule Format Error");
+				SetUnProcessableEntity("Schedule Format Error");
 			else if (max_capacity < 30 || max_capacity > 150)
-				SetBadRequest("max_capacity < 30 || max_capacity > 150");
+				SetUnProcessableEntity("max_capacity < 30 || max_capacity > 150");
 			else if (startWeek == 0 || startWeek > 20 || endWeek == 0 || endWeek > 20 || startWeek > endWeek)
-				SetBadRequest("startWeek or endWeek Error");
+				SetUnProcessableEntity("startWeek or endWeek Error");
 			else if (location.length() <= 4 || location.length() > 100)
-				SetBadRequest("location.length() <= 4 || location.length() > 100");
+				SetUnProcessableEntity("location.length() <= 4 || location.length() > 100");
 			else
 				ok = true;
 			if (!ok) return;
@@ -1057,7 +1026,7 @@ void HttpConnection::AdminRequest()
 
 			if (!ok)
 			{
-				SetBadRequest("Course Time Conflict");
+				SetUnProcessableEntity("Course Time Conflict");
 				return;
 			}
 
@@ -1071,12 +1040,12 @@ void HttpConnection::AdminRequest()
 				std::transform(type.begin(), type.end(), type.begin(), ::toupper);
 
 				if (course_name.length() == 0 || course_name.length() > 100)
-					SetBadRequest("Course Name Too Long");
+					SetUnProcessableEntity("Course Name Too Long");
 				else if (credit == 0 || credit > 7)
-					SetBadRequest("Credit == 0 Or Credit > 7");
+					SetUnProcessableEntity("Credit == 0 Or Credit > 7");
 				else if (type != "GENERAL REQUIRED" || type != "MAJOR REQUIRED" || type != "MAJOR ELECTIVE" ||
 					type != "UNIVERSITY ELECTIVE" || type != "PRACTICAL")
-					SetBadRequest("Type Error");
+					SetUnProcessableEntity("Type Error");
 				else 
 					ok = true;
 
@@ -1122,7 +1091,7 @@ void HttpConnection::AdminRequest()
 			auto& courseData = recv["courseData"];
 			auto section_id = courseData["section_id"].asUInt();
 			auto teacher_id = courseData["teacher_id"].asUInt();
-			auto schedule = courseData["schedule"];
+			auto& schedule = courseData["schedule"];
 			auto startWeek = courseData["startWeek"].asUInt();
 			auto endWeek = courseData["endWeek"].asUInt();
 			auto location = courseData["location"].asString();
@@ -1131,11 +1100,11 @@ void HttpConnection::AdminRequest()
 
 			bool ok = false;
 			if (schedule_str.length() == 0)
-				SetBadRequest("Schedule Format Error");
+				SetUnProcessableEntity("Schedule Format Error");
 			else if (startWeek == 0 || startWeek > 20 || endWeek == 0 || endWeek > 20 || startWeek > endWeek)
-				SetBadRequest("startWeek or endWeek Error");
+				SetUnProcessableEntity("startWeek or endWeek Error");
 			else if (location.length() <= 4 || location.length() > 100)
-				SetBadRequest("location.length() <= 4 || location.length() > 100");
+				SetUnProcessableEntity("location.length() <= 4 || location.length() > 100");
 			else
 				ok = true;
 
@@ -1179,7 +1148,7 @@ void HttpConnection::AdminRequest()
 
 			if (!ok)
 			{
-				SetBadRequest("Course Time Conflict");
+				SetUnProcessableEntity("Course Time Conflict");
 				return;
 			}
 
@@ -1199,7 +1168,7 @@ void HttpConnection::AdminRequest()
 		}
 		else
 		{
-			SetBadRequest("AdminRequest Wrong");
+			SetUnProcessableEntity("AdminRequest Wrong");
 		}
 
 		break;
@@ -1212,7 +1181,7 @@ void HttpConnection::AdminRequest()
 		if (!ParseUserData(body_str, recv))
 		{
 			// 解析失败
-			SetBadRequest("ParseUserData error");
+			SetUnProcessableEntity("ParseUserData error");
 			return;
 		}
 		// 5.删除某些课程/api/admin_courseManage/deleteCourse
@@ -1235,7 +1204,7 @@ void HttpConnection::AdminRequest()
 					.bind(id).execute().fetchOne();
 
 				if (row.isNull())
-					SetBadRequest("section_id error: id is " + std::to_string(id));
+					SetUnProcessableEntity("section_id error: id is " + std::to_string(id));
 				else
 					section_id.push_back(id);
 			}
@@ -1247,12 +1216,12 @@ void HttpConnection::AdminRequest()
 		}
 		else
 		{
-			SetBadRequest("AdminRequest Wrong");
+			SetUnProcessableEntity("AdminRequest Wrong");
 		}
 		break;
 	}
 	default:
-		SetBadRequest("AdminRequest Wrong Method");
+		SetUnProcessableEntity("AdminRequest Wrong Method");
 		break;
 	}
 }
@@ -1308,6 +1277,6 @@ void HttpConnection::CloseConnection() noexcept
 	_server.ClearConnection(_uuid);
 }
 
-StudentHandler HttpConnection::_studentHandler;
-InstructorHandler HttpConnection::_instructorHandler;
-AdminHandler HttpConnection::_adminHandler;
+MysqlStReqHandler HttpConnection::_studentHandler;
+MysqlInstrReqHandler HttpConnection::_instructorHandler;
+MysqlAdmReqHandler HttpConnection::_adminHandler;

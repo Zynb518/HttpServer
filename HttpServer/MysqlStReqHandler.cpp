@@ -1,13 +1,13 @@
 #include <json/json.h>
 #include <iostream>
-#include "StudentHandler.h"
+#include "MysqlStReqHandler.h"
 #include <mysqlx/xdevapi.h>
 #include "MysqlConnectionPool.h"
 #include "HttpConnection.h"
 #include "Log.h"
 #include "Tools.h"
 
-void StudentHandler::get_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id)
+void MysqlStReqHandler::get_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_get_personal_info(?)").bind(id).execute();
@@ -27,11 +27,10 @@ void StudentHandler::get_personal_info(std::shared_ptr<HttpConnection> con, uint
 	root["phone"]		= row[8].get<std::string>();
 
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
 }
 
-void StudentHandler::update_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id,
+void MysqlStReqHandler::update_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id,
 	StringRef birthday, StringRef email, StringRef phone, StringRef password)
 {
 	Json::Value root;
@@ -44,11 +43,10 @@ void StudentHandler::update_personal_info(std::shared_ptr<HttpConnection> con, u
 	
 	root["result"] = true;
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
 }
 
-void StudentHandler::browse_courses(std::shared_ptr<HttpConnection> con, uint32_t id)
+void MysqlStReqHandler::browse_courses(std::shared_ptr<HttpConnection> con, uint32_t id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_browse_courses(?)")
@@ -82,11 +80,10 @@ void StudentHandler::browse_courses(std::shared_ptr<HttpConnection> con, uint32_
 	root["courseObj"] = arr;
 	
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
 }
 
-void StudentHandler::register_course(std::shared_ptr<HttpConnection> con, uint32_t id, uint32_t section_id)
+void MysqlStReqHandler::register_course(std::shared_ptr<HttpConnection> con, uint32_t id, uint32_t section_id)
 {
 	Json::Value root;
 	// 2.人数冲突
@@ -98,13 +95,12 @@ void StudentHandler::register_course(std::shared_ptr<HttpConnection> con, uint32
 	sess.close();
 
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
 }
 
 
 
-void StudentHandler::withdraw_course(std::shared_ptr<HttpConnection> con, uint32_t id, uint32_t section_id)
+void MysqlStReqHandler::withdraw_course(std::shared_ptr<HttpConnection> con, uint32_t id, uint32_t section_id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	sess.sql("CALL st_withdraw_course(?,?)").bind(id).bind(section_id).execute();
@@ -114,11 +110,10 @@ void StudentHandler::withdraw_course(std::shared_ptr<HttpConnection> con, uint32
 	root["result"] = true;
 
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
 }
 
-void StudentHandler::get_schedule(std::shared_ptr<HttpConnection> con, uint32_t id, StringRef semester)
+void MysqlStReqHandler::get_schedule(std::shared_ptr<HttpConnection> con, uint32_t id, StringRef semester)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_get_schedule(?,?)").bind(id).bind(semester).execute();
@@ -146,11 +141,10 @@ void StudentHandler::get_schedule(std::shared_ptr<HttpConnection> con, uint32_t 
 	root["scheduleObj"] = arr;
 	
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
 }
 
-void StudentHandler::get_transcript(std::shared_ptr<HttpConnection> con, uint32_t id)
+void MysqlStReqHandler::get_transcript(std::shared_ptr<HttpConnection> con, uint32_t id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_get_personal_info(?)").bind(id).execute();
@@ -172,11 +166,10 @@ void StudentHandler::get_transcript(std::shared_ptr<HttpConnection> con, uint32_
 	root["result"] = true;
 	root["scoreObj"] = arr;
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
 }
 
-void StudentHandler::calculate_gpa(std::shared_ptr<HttpConnection> con, uint32_t id)
+void MysqlStReqHandler::calculate_gpa(std::shared_ptr<HttpConnection> con, uint32_t id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL st_calculate_gpa(?)").bind(id).execute();
@@ -187,32 +180,5 @@ void StudentHandler::calculate_gpa(std::shared_ptr<HttpConnection> con, uint32_t
 	root["myGpa"] = res.fetchOne()[0].get<double>();
 
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
-}
-
-void StudentHandler::ParseTimeString(std::string_view str_v, Json::Value& timeArr)
-{
-	do
-	{
-		Json::Value timeObj; // 一个 day-time 对
-
-		auto c = str_v.find(" ");
-		std::string_view day(str_v.data(), c);
-		timeObj["day"] = std::string(day);
-		str_v = str_v.substr(c + 1);
-		c = str_v.find(",");
-		if (c != std::string_view::npos) // 后面还有时间
-		{
-			std::string_view time(str_v.data(), c);
-			timeObj["time"] = std::string(time);
-			str_v = str_v.substr(c + 1);
-		}
-		else
-		{
-			timeObj["time"] = std::string(str_v);
-			return;
-		}
-		timeArr.append(timeObj);
-	} while (str_v.size() > 0);
 }

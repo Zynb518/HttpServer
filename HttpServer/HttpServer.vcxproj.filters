@@ -33,16 +33,25 @@
     <ClCompile Include="MysqlConnectionPool.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="StudentHandler.cpp">
+    <ClCompile Include="MysqlStReqHandler.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="InstructorHandler.cpp">
+    <ClCompile Include="MysqlInstrReqHandler.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="AdminHandler.cpp">
+    <ClCompile Include="MysqlAdmReqHandler.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="Tools.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="StReqHandler.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="InstrReqHandler.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="AdmReqHandler.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
@@ -62,19 +71,31 @@
     <ClInclude Include="MysqlConnectionPool.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="StudentHandler.h">
+    <ClInclude Include="MysqlStReqHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="InstructorHandler.h">
+    <ClInclude Include="MysqlInstrReqHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="AdminHandler.h">
+    <ClInclude Include="MysqlAdmReqHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Log.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Tools.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="RequestHandler.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="StReqHandler.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="InstrReqHandler.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="AdmReqHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

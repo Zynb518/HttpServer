@@ -1,4 +1,4 @@
-#include "InstructorHandler.h"
+#include "MysqlInstrReqHandler.h"
 #include "MysqlConnectionPool.h"
 #include "HttpConnection.h"
 #include "Tools.h"
@@ -6,7 +6,7 @@
 
 namespace beast = boost::beast;
 
-void InstructorHandler::get_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id)
+void MysqlInstrReqHandler::get_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL ins_get_personal_info(?)").bind(id).execute();
@@ -22,11 +22,10 @@ void InstructorHandler::get_personal_info(std::shared_ptr<HttpConnection> con, u
 	root["phone"]	= row[4].get<std::string>();
 
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
 }
 
-void InstructorHandler::update_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id, 
+void MysqlInstrReqHandler::update_personal_info(std::shared_ptr<HttpConnection> con, uint32_t id,
 	const std::string& college, 
 	const std::string& email, 
 	const std::string& phone, 
@@ -47,11 +46,10 @@ void InstructorHandler::update_personal_info(std::shared_ptr<HttpConnection> con
 	
 	root["result"] = true;
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
 }
 
-void InstructorHandler::get_teaching_sections(std::shared_ptr<HttpConnection> con, uint32_t id, const std::string& semester)
+void MysqlInstrReqHandler::get_teaching_sections(std::shared_ptr<HttpConnection> con, uint32_t id, const std::string& semester)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::RowResult res = sess.sql("CALL ins_get_teaching_sections(:id , :semester)")
@@ -78,11 +76,10 @@ void InstructorHandler::get_teaching_sections(std::shared_ptr<HttpConnection> co
 	root["result"] = true;
 	root["courseObj"] = arr;
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
 }
 
-void InstructorHandler::get_section_students(std::shared_ptr<HttpConnection> con, uint32_t section_id)
+void MysqlInstrReqHandler::get_section_students(std::shared_ptr<HttpConnection> con, uint32_t section_id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::SqlResult results = sess.sql("CALL ins_get_section_students(?)").bind(section_id).execute();
@@ -112,11 +109,10 @@ void InstructorHandler::get_section_students(std::shared_ptr<HttpConnection> con
 	root["result"] = true;
 	root["initData"] = arr;
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
 }
 
-void InstructorHandler::post_grades(std::shared_ptr<HttpConnection> con, uint32_t student_id, uint32_t section_id, uint32_t score)
+void MysqlInstrReqHandler::post_grades(std::shared_ptr<HttpConnection> con, uint32_t student_id, uint32_t section_id, uint32_t score)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	sess.sql("CALL ins_post_grades(:student_id, :section_id, :score)")
@@ -129,37 +125,5 @@ void InstructorHandler::post_grades(std::shared_ptr<HttpConnection> con, uint32_
 	Json::Value root;
 	root["result"] = true;
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
-	con->GetResponse().prepare_payload();
 	con->StartWrite();
-}
-
-void InstructorHandler::get_section_statistics(std::shared_ptr<HttpConnection> con, uint32_t section_id)
-{
-
-}
-
-void InstructorHandler::ParseTimeString(std::string_view str_v, Json::Value& timeArr)
-{
-	do
-	{
-		Json::Value timeObj; // 一个 day-time 对
-
-		auto c = str_v.find(" ");
-		std::string_view day(str_v.data(), c);
-		timeObj["day"] = std::string(day);
-		str_v = str_v.substr(c + 1);
-		c = str_v.find(",");
-		if (c != std::string_view::npos) // 后面还有时间
-		{
-			std::string_view time(str_v.data(), c);
-			timeObj["time"] = std::string(time);
-			str_v = str_v.substr(c + 1);
-		}
-		else
-		{
-			timeObj["time"] = std::string(str_v);
-			return;
-		}
-		timeArr.append(timeObj);
-	} while (str_v.size() > 0);
 }

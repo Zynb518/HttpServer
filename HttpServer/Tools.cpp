@@ -1,4 +1,6 @@
 #include "Tools.h"
+#include "Log.h"
+#include "MysqlConnectionPool.h"
 
 // Timer 类的实现
 Timer::Timer()
@@ -83,6 +85,31 @@ bool DataValidator::isValidSemester(const std::string& semester)
         return false;
 
     return true;
+}
+
+bool DataValidator::isUserExists(uint32_t user_id, const std::string& password, const std::string& role)
+{
+    try {
+        // 获取 users 表
+        // mysqlx::Session sess = MySQLConnectionPool::Instance().GetSession();
+        auto sess = MysqlConnectionPool::Instance().GetSession();
+        auto users = sess.getSchema("scut_sims").getTable("users");
+
+        // 构建查询条件 - 使用主键(user_id, role)和密码进行匹配
+        auto result = users.select("user_id")
+            .where("user_id = :uid AND password = :pwd AND role = :r")
+            .bind("uid", user_id)
+            .bind("pwd", password)
+            .bind("r", role)  // 只需要检查是否存在，限制返回1条记录
+            .execute();
+        sess.close();
+        // 检查是否有结果
+        return result.count() > 0;
+    }
+    catch (const mysqlx::Error& err) {
+        LOG_DEBUG("Database Error: " << err.what());
+        return false;
+    }
 }
 
 // DataValidator 私有辅助方法实现

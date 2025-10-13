@@ -7,9 +7,9 @@
 #include <memory>
 #include <mysqlx/xdevapi.h>
 
-#include "StudentHandler.h"
-#include "InstructorHandler.h"
-#include "AdminHandler.h"
+#include "MysqlStReqHandler.h"
+#include "MysqlInstrReqHandler.h"
+#include "MysqlAdmReqHandler.h"
 
 namespace beast = boost::beast;
 class HttpServer;
@@ -22,24 +22,21 @@ public:
 	tcp::socket& GetSocket() noexcept;
 	std::string_view GetUuid() noexcept;
 	beast::http::response<beast::http::dynamic_body>& GetResponse() noexcept;
-	void StartWrite();
 	void ReadLogin(); // 异步读http登陆请求
-	void SetBadRequest(Json::Value& message) noexcept; // 业务错误,不关闭连接
-	void SetBadRequest(const std::string& reason) noexcept; // 业务错误,不关闭连接
+	void StartWrite();
+
+	void SetUnProcessableEntity(Json::Value& message) noexcept; // 业务错误,不关闭连接
+	void SetUnProcessableEntity(const std::string& reason) noexcept; // 业务错误,不关闭连接
+	// BadRequest close，再手动CloseConnection
+	void SetBadRequest() noexcept;
+
 private:
 	void StartTimer(); // 超时就断开连接
 	void ResetTimer();
 	
 	bool HandleLogin(); // 解析request
 	bool ParseUserData(const std::string& body, Json::Value& recv); // 解析消息体到recv_root
-	bool UserExists(uint32_t user_id, const std::string& password, const std::string& role); // 用户是否存在
-	
-	// BadRequest close，再手动CloseConnection
-	void SetBadRequest() noexcept; 
-
 	void WriteBadResponse() noexcept;
-	// 正常发送 登陆成功
-	void WriteLoginSuccess(); 
 
 	// 接受用户操作
 	void StartRead();
@@ -66,7 +63,8 @@ private:
 	boost::asio::steady_timer _timer{
 		_socket.get_executor(), std::chrono::seconds(60)
 	};
-	// 用户登陆 and 
+
+	// 用户登陆 
 	beast::http::request<beast::http::dynamic_body> _request;
 	beast::http::response<beast::http::dynamic_body> _response;
 
@@ -79,9 +77,9 @@ private:
 	std::string _password;
 	std::string _role;
 
-	static StudentHandler _studentHandler;
-	static InstructorHandler _instructorHandler;
-	static AdminHandler _adminHandler;
+	static MysqlStReqHandler _studentHandler;
+	static MysqlInstrReqHandler _instructorHandler;
+	static MysqlAdmReqHandler _adminHandler;
 
 };
 

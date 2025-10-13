@@ -135,27 +135,34 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="AdminHandler.cpp" />
+    <ClCompile Include="MysqlAdmReqHandler.cpp" />
+    <ClCompile Include="AdmReqHandler.cpp" />
     <ClCompile Include="HttpConnection.cpp" />
     <ClCompile Include="HttpServer.cpp" />
-    <ClCompile Include="InstructorHandler.cpp" />
+    <ClCompile Include="InstrReqHandler.cpp" />
+    <ClCompile Include="MysqlInstrReqHandler.cpp" />
     <ClCompile Include="IOServicePool.cpp" />
     <ClCompile Include="LogicSystem.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MysqlConnectionPool.cpp" />
-    <ClCompile Include="StudentHandler.cpp" />
+    <ClCompile Include="StReqHandler.cpp" />
+    <ClCompile Include="MysqlStReqHandler.cpp" />
     <ClCompile Include="Tools.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="AdminHandler.h" />
+    <ClInclude Include="MysqlAdmReqHandler.h" />
+    <ClInclude Include="AdmReqHandler.h" />
     <ClInclude Include="HttpConnection.h" />
     <ClInclude Include="HttpServer.h" />
-    <ClInclude Include="InstructorHandler.h" />
+    <ClInclude Include="InstrReqHandler.h" />
+    <ClInclude Include="MysqlInstrReqHandler.h" />
     <ClInclude Include="IOServicePool.h" />
     <ClInclude Include="Log.h" />
     <ClInclude Include="LogicSystem.h" />
     <ClInclude Include="MysqlConnectionPool.h" />
-    <ClInclude Include="StudentHandler.h" />
+    <ClInclude Include="RequestHandler.h" />
+    <ClInclude Include="StReqHandler.h" />
+    <ClInclude Include="MysqlStReqHandler.h" />
     <ClInclude Include="Tools.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
