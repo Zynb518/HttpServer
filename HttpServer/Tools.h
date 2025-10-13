@@ -2,7 +2,6 @@
 #include <iostream>
 #include <string>
 #include <chrono>
-#include <regex>
 #include <sstream>
 #include <vector>
 #include <cstdio>
@@ -40,31 +39,4 @@ struct Timer
 
     Timer();
     ~Timer();
-};
-
-class DataValidator {
-private:
-    // 正则表达式模式声明
-    static const std::regex EMAIL_REGEX;
-    static const std::regex PHONE_REGEX;
-    static const std::regex DATE_REGEX;
-    static const std::regex PASSWORD_REGEX;
-
-    // 私有辅助方法声明
-    static bool isValidDateValues(int year, int month, int day);
-    static bool isLeapYear(int year);
-
-public:
-    // 验证方法声明
-    static bool isValidEmail(const std::string& email);
-    static bool isValidPhone(const std::string& phone);
-    static bool isValidDate(const std::string& date);
-    static bool isValidPassword(const std::string& password);
-    static bool validateAll(const std::string& birthday, const std::string& email,
-        const std::string& phone, const std::string& password);
-
-    // 学期格式是否正确
-    static bool isValidSemester(const std::string& semester); 
-    // 用户是否存在 
-    static bool isUserExists(uint32_t user_id, const std::string& password, const std::string& role); 
 };

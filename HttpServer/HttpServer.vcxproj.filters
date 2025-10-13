@@ -33,25 +33,46 @@
     <ClCompile Include="MysqlConnectionPool.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="MysqlStReqHandler.cpp">
+    <ClCompile Include="ReqHander\MysqlStReqHandler.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="MysqlInstrReqHandler.cpp">
+    <ClCompile Include="ReqHander\MysqlInstrReqHandler.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="MysqlAdmReqHandler.cpp">
+    <ClCompile Include="ReqHander\MysqlAdmReqHandler.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="Tools.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="StReqHandler.cpp">
+    <ClCompile Include="ReqHander\StReqHandler.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="InstrReqHandler.cpp">
+    <ClCompile Include="ReqHander\InstrReqHandler.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="AdmReqHandler.cpp">
+    <ClCompile Include="ReqHander\AdmReqHandler.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="DataValidator\DataValidator.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="DataValidator\StDataValidator.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="DataValidator\InstrDataValidator.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="DataValidator\AdmDataValidator.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="DataValidator\MysqlAdmDataValidator.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="DataValidator\MysqlInstrDataValidator.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="DataValidator\MysqlStDataValidator.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
@@ -71,13 +92,13 @@
     <ClInclude Include="MysqlConnectionPool.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="MysqlStReqHandler.h">
+    <ClInclude Include="ReqHander\MysqlStReqHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="MysqlInstrReqHandler.h">
+    <ClInclude Include="ReqHander\MysqlInstrReqHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="MysqlAdmReqHandler.h">
+    <ClInclude Include="ReqHander\MysqlAdmReqHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Log.h">
@@ -86,17 +107,41 @@
     <ClInclude Include="Tools.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="RequestHandler.h">
+    <ClInclude Include="ReqHander\RequestHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="StReqHandler.h">
+    <ClInclude Include="ReqHander\StReqHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="InstrReqHandler.h">
+    <ClInclude Include="ReqHander\InstrReqHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="AdmReqHandler.h">
+    <ClInclude Include="ReqHander\AdmReqHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="DataValidator\DataValidator.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="DataValidator\StDataValidator.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="DataValidator\InstrDataValidator.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="DataValidator\AdmDataValidator.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="DataValidator\MysqlAdmDataValidator.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="DataValidator\MysqlInstrDataValidator.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="DataValidator\MysqlStDataValidator.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ClassDiagram.cd" />
   </ItemGroup>
 </Project>

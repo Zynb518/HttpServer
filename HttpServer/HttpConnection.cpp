@@ -2,26 +2,15 @@
 #include "HttpServer.h"
 #include "MysqlConnectionPool.h"
 #include "LogicSystem.h"
+#include "Log.h"
+#include "Tools.h"
+
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <iostream>
 #include <algorithm>
 #include <sstream>
 #include <unordered_set>
-#include "Log.h"
-#include "Tools.h"
-
-bool timetable[22][8][9];
-
-static const std::unordered_map<std::string, int> weekdayMap = {
-				{GetUTF8ForDatabase(L"周一"), 1},
-				{GetUTF8ForDatabase(L"周二"), 2},
-				{GetUTF8ForDatabase(L"周三"), 3},
-				{GetUTF8ForDatabase(L"周四"), 4},
-				{GetUTF8ForDatabase(L"周五"), 5},
-				{GetUTF8ForDatabase(L"周六"), 6},
-				{GetUTF8ForDatabase(L"周日"), 7}
-};
 
 HttpConnection::HttpConnection(boost::asio::io_context& ioc, HttpServer& server) noexcept
 	:_socket(ioc), _server(server), _user_id(0)
@@ -150,12 +139,13 @@ bool HttpConnection::HandleLogin()
 			_role = _role == "teacher" ? "instructor" : _role;
 			_role = _role == "admin" ? "administer" : _role;
 
-			if (!DataValidator::isUserExists(_user_id, _password, _role))
+			if (!_dataValidator.isUserExists(_user_id, _password, _role))
 			{
 				// 用户不存在
 				LOG_INFO("User Not Exist");
 				return false;
 			}
+
 			LOG_INFO("User Exists, Login Success");
 			_response.result(beast::http::status::ok);
 			Json::Value send;
@@ -328,7 +318,7 @@ void HttpConnection::StudentRequest()
 			constexpr size_t len = sizeof("/api/student_tableCheck/ask?semester=") - 1;
 			std::string str(_request.target().substr(len));
 
-			if (!DataValidator::isValidSemester(str))
+			if (!_dataValidator.isValidSemester(str))
 			{
 				SetUnProcessableEntity("Semester Format Wrong!");
 				return;
@@ -377,30 +367,7 @@ void HttpConnection::StudentRequest()
 			Json::Value root;
 			// 选课时间冲突
 
-			memset(timetable, 0, sizeof timetable); // ok
-			mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-			sess.getSchema("scut_sims");
-			// 处理已经选的课程
-			mysqlx::RowResult result = sess.sql(
-				"SELECT s.start_week, s.end_week, s.time_slot "
-				"FROM enrollments e "
-				"JOIN sections s USING (section_id) "
-				"WHERE e.student_id = ? AND e.status = 'Enrolling'"
-			).bind(_user_id).execute();
-
-			for (auto row : result)
-			{
-				ProcessRow(row, 1);
-			}
-
-			// 处理即将要选的课程
-			auto row = sess.sql(
-				"SELECT start_week, end_week, time_slot"
-				"FROM sections s"
-				"WHERE section_id = ?;"
-			).bind(section_id).execute().fetchOne();
-
-			bool ok = ProcessRow(row, 0);
+			bool ok = _dataValidator.isStTimeConflict(_user_id, section_id);
 			if (!ok)
 			{
 				SetUnProcessableEntity("Course Time Conflict");
@@ -409,17 +376,6 @@ void HttpConnection::StudentRequest()
 
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), section_id]() {
 				// 2.人数冲突 必须放在队列里进行判断
-				mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-				mysqlx::Table sections = sess.getSchema("scut_sims").getTable("sections");
-				auto row = sections.select("1").where("section_id = :sid AND `number` < max_capacity")
-					.bind("sid", section_id)
-					.execute().fetchOne();
-
-				if (row.isNull())
-				{
-					SetUnProcessableEntity("Section Full");
-					return;
-				} 
 				_studentHandler.register_course(self, _user_id, section_id); });
 		}
 		// 退课
@@ -438,13 +394,13 @@ void HttpConnection::StudentRequest()
 			auto password = recv["password"].asString();
 
 			bool ok = false;
-			if (!DataValidator::isValidDate(birthday))
+			if (!_dataValidator.isValidDate(birthday))
 				SetUnProcessableEntity("birthday error");
-			else if (!DataValidator::isValidEmail(email))
+			else if (!_dataValidator.isValidEmail(email))
 				SetUnProcessableEntity("email error");
-			else if (!DataValidator::isValidPhone(phone))
+			else if (!_dataValidator.isValidPhone(phone))
 				SetUnProcessableEntity("phone error");
-			else if (!DataValidator::isValidPassword(password))
+			else if (!_dataValidator.isValidPassword(password))
 				SetUnProcessableEntity("password error");
 			else
 				ok = true;
@@ -474,141 +430,6 @@ void HttpConnection::StudentRequest()
 	}
 }
 
-// 1 对应已选，0对应即将选但还未选
-bool HttpConnection::ProcessRow(const mysqlx::Row& row, size_t choice)
-{
-	auto start_week = row[0].get<uint32_t>();
-	auto end_week = row[1].get<uint32_t>();
-	auto time_slot = row[2].get<std::string>();
-	LOG_INFO(
-		   "start-week: " << start_week << " "
-		<< "end-week: " << end_week << " "
-		<< "time_slot: " << time_slot << std::endl);
-
-	std::string_view str_v(time_slot);
-
-	do // 一个row中有可能有多条时间
-	{
-		// 处理time_slot
-		uint32_t Day = 0;
-		uint32_t L = 0, R = 0;
-
-		auto t = str_v.find(" "); // 分割出星期几
-		if (t != std::string_view::npos)
-		{
-			const std::string s(str_v.data(), t);
-			auto it = weekdayMap.find(s);
-			if (it != weekdayMap.end())
-				Day = it->second;
-		}
-		else
-		{
-			LOG_ERROR("Format Error");
-			break;
-		}
-
-		t = str_v.find("-"); // 找到数字
-		if (t != std::string::npos)
-		{
-			L = time_slot[t - 1] - '0';
-			R = time_slot[t + 1] - '0';
-		}
-		else
-		{
-			LOG_ERROR("Format Error");
-			break;
-		}
-
-		LOG_INFO("day: " << Day << "; time: " << L << "-" << R);
-		// 已经有的课
-		if (choice)
-		{
-			for (size_t i = start_week; i <= end_week; ++i)
-				for (size_t j = L; j <= R; ++j)
-					timetable[i][Day][j] = true;
-		}
-		else // 即将要选的课
-		{
-			for (size_t i = start_week; i <= end_week; ++i)
-				for (size_t j = L; j <= R; ++j)
-					if (timetable[i][Day][j]) return false;
-					else timetable[i][Day][j] = true;
-		}
-
-		t = str_v.find(",");
-		if (t != std::string_view::npos) // 后面还有时间
-			str_v = str_v.substr(t + 1);
-		else
-			break;
-
-	} while (str_v.size() > 0);
-
-	return true;
-}
-
-bool HttpConnection::ProcessRow(uint32_t start_week, uint32_t end_week, const std::string& time_slot, uint32_t choice)
-{
-	std::string_view str_v(time_slot);
-
-	do // 一个row中有可能有多条时间
-	{
-		// 处理time_slot
-		uint32_t Day = 0;
-		uint32_t L = 0, R = 0;
-
-		auto t = str_v.find(" "); // 分割出星期几
-		if (t != std::string_view::npos)
-		{
-			const std::string s(str_v.data(), t);
-			auto it = weekdayMap.find(s);
-			if (it != weekdayMap.end())
-				Day = it->second;
-		}
-		else
-		{
-			LOG_ERROR("Format Error");
-			break;
-		}
-
-		t = str_v.find("-"); // 找到数字
-		if (t != std::string::npos)
-		{
-			L = time_slot[t - 1] - '0';
-			R = time_slot[t + 1] - '0';
-		}
-		else
-		{
-			LOG_ERROR("Format Error");
-			break;
-		}
-
-		LOG_INFO("day: " << Day << "; time: " << L << "-" << R);
-
-		if (choice == 1)
-		{
-			for (size_t i = start_week; i <= end_week; ++i)
-				for (size_t j = L; j <= R; ++j)
-					if (timetable[i][Day][j]) return false;
-					else timetable[i][Day][j] = true;
-		}
-		else if (choice == 0)
-		{
-			for (size_t i = start_week; i <= end_week; ++i)
-				for (size_t j = L; j <= R; ++j)
-					timetable[i][Day][j] = false;
-		}
-
-		t = str_v.find(",");
-		if (t != std::string_view::npos) // 后面还有时间
-			str_v = str_v.substr(t + 1);
-		else
-			break;
-
-	} while (str_v.size() > 0);
-
-	return true;
-}
-
 void HttpConnection::InstructorRequest()
 {
 	switch (_request.method())
@@ -622,12 +443,11 @@ void HttpConnection::InstructorRequest()
 			constexpr size_t len = sizeof("/api/teacher_tableCheck/ask?semester=") - 1;
 			std::string str(_request.target().substr(len));
 
-			if (!DataValidator::isValidSemester(str))
+			if (!_dataValidator.isValidSemester(str))
 			{
 				SetUnProcessableEntity("Semester Format Wrong!");
 				return;
 			}
-
 			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), str = std::move(str)]() {
 				_instructorHandler.get_teaching_sections(self, _user_id, str); });
 		}
@@ -670,8 +490,8 @@ void HttpConnection::InstructorRequest()
 		{
 			auto student_id = stoi(recv["student_id"].asString());
 			auto section_id = stoi(recv["section_id"].asString());
-			auto score = recv["score"].asDouble();
-			if(score < 0 || score > 100)
+			auto score = recv["score"].asUInt();
+			if(_dataValidator.isValidScore(score))
 			{
 				SetUnProcessableEntity("Score Range Error");
 				return;
@@ -689,11 +509,11 @@ void HttpConnection::InstructorRequest()
 			auto password = recv["password"].asString();
 
 			bool ok = false;
-			if (!DataValidator::isValidEmail(email))
+			if (!_dataValidator.isValidEmail(email))
 				SetUnProcessableEntity("Email Error");
-			else if (!DataValidator::isValidPhone(phone))
+			else if (!_dataValidator.isValidPhone(phone))
 				SetUnProcessableEntity("Phone Error");
-			else if (!DataValidator::isValidPassword(password))
+			else if (!_dataValidator.isValidPassword(password))
 				SetUnProcessableEntity("Password Error");
 			else
 				ok = true;
@@ -737,17 +557,17 @@ void HttpConnection::AdminRequest()
 		if (target.substr(0, sizeof("/api/admin_accountManage/getInfo?role=") - 1) ==
 				"/api/admin_accountManage/getInfo?role=")
 		{
-			LogicSystem::Instance().PushToQue([this, self = shared_from_this()]()
+			constexpr size_t len = sizeof("/api/admin_accountManage/getInfo?role=") - 1;
+			std::string str(_request.target().substr(len));
+			if (!_dataValidator.isValidRole(str))
+				SetUnProcessableEntity("role is not student or teacher");
+
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), str = std::move(str)]()
 				{
-					constexpr size_t len = sizeof("/api/admin_accountManage/getInfo?role=") - 1;
-					std::string str(_request.target().substr(len));
 					if (str == "student")
 						_adminHandler.get_students_info(self);
 					else if (str == "teacher")
 						_adminHandler.get_instructors_info(self);
-					else
-						SetUnProcessableEntity("role is not student or teacher");
-
 				});
 		}
 		// 4.获取某学期的所有课程
@@ -756,7 +576,7 @@ void HttpConnection::AdminRequest()
 		{
 			constexpr size_t len = sizeof("/api/admin_courseManage/getAllCourse?semester=") - 1;
 			std::string semester(target.substr(len));
-			if (!DataValidator::isValidSemester(semester))
+			if (!_dataValidator.isValidSemester(semester))
 			{
 				SetUnProcessableEntity("Semester Format Wrong!");
 				return;
@@ -795,7 +615,7 @@ void HttpConnection::AdminRequest()
 			std::string str_sem(target.substr(pos_sem));
 			uint32_t user_id = stoi(std::string(strv_id));
 
-			if (!DataValidator::isValidSemester(str_sem))
+			if (!_dataValidator.isValidSemester(str_sem))
 			{
 				SetUnProcessableEntity("Semester Format Wrong!");
 				return;
@@ -823,7 +643,7 @@ void HttpConnection::AdminRequest()
 			std::string str_sem(target.substr(pos_sem));
 			uint32_t user_id = stoi(std::string(strv_id));
 
-			if (!DataValidator::isValidSemester(str_sem))
+			if (!_dataValidator.isValidSemester(str_sem))
 			{
 				SetUnProcessableEntity("Semester Format Wrong!");
 				return;
@@ -886,47 +706,58 @@ void HttpConnection::AdminRequest()
 
 		// 2.删除某些账号
 		if (target == "/api/admin_accountManage/deleteInfo")
-			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), recv]()
+		{
+			std::vector<uint32_t> user_ids;
+			std::vector<std::string> roles;
+			auto& deleteInfo = recv["deleteInfo"];
+			for (const auto& item : deleteInfo)
+			{
+				user_ids.push_back(stoi(item["user_id"].asString()));
+				roles.push_back(item["role"].asString());
+			}
+			for (const auto& item : roles)
+			{
+				if (!_dataValidator.isValidRole(item))
 				{
-					std::vector<uint32_t> user_id;
-					std::vector<std::string> role;
-					auto& deleteInfo = recv["deleteInfo"];
-					for (const auto& item : deleteInfo)
-					{
-						user_id.push_back(stoi(item["user_id"].asString()));
-						role.push_back(item["role"].asString());
-					}
-			
-					for (const auto& item : role)
-					{
-						if (item != "student" || item != "teacher")
-							SetUnProcessableEntity("delete Account Role error");
-						return;
-					}
-					_adminHandler.del_someone(self, user_id, role);
+					SetUnProcessableEntity("delete Account Role error");
+					return;
+				}
+			}
+
+			LogicSystem::Instance().PushToQue(
+				[
+					user_ids = std::move(user_ids),
+					roles = std::move(roles),
+					this, self = shared_from_this()
+				]()
+				{
+					
+					_adminHandler.del_someone(self, user_ids, roles);
 				});
+		}
 		// 3. 增加某个账号
 		else if (target == "/api/admin_accountManage/new")
 		{
 			auto role = recv["role"].asString();
 
+			auto name = recv["name"].asString();
+			if (_dataValidator.isValidName(name))
+			{
+				SetUnProcessableEntity("Name too long or Zero");
+				return;
+			}
+
 			if (role == "student")
 			{
-				auto name = recv["name"].asString();
 				auto gender = recv["gender"].asString();
 				auto grade = recv["grade"].asUInt();
 				auto major_id = stoi(recv["major_id"].asString());
 				auto college_id = recv["college_id"].asUInt();
-				
-				static const auto man = GetUTF8ForDatabase(L"男");
-				static const auto woman = GetUTF8ForDatabase(L"女");
 
 				bool ok = false;
-				if (name.length() == 0 || name.length() > 50)
-					SetUnProcessableEntity("Name too long or Zero");
-				else if (gender != man || gender != woman)
+				if (_dataValidator.isValidGender(gender))
 					SetUnProcessableEntity("Gender Error");
-				else if(grade < 2000 || grade > 2100)
+				else if(_dataValidator.isValidGrade(grade))
 					SetUnProcessableEntity("Grade Error");
 				else
 					ok = true;
@@ -948,13 +779,6 @@ void HttpConnection::AdminRequest()
 			}
 			else if (role == "teacher")
 			{
-				auto name = recv["name"].asString();
-				if(name.length() == 0 || name.length() > 50)
-				{
-					SetUnProcessableEntity("Name too long or Zero");
-					return;
-				}
-
 				auto college_id = stoi(recv["college_id"].asString());
 				LogicSystem::Instance().PushToQue(
 					[ =, name = std::move(name),
@@ -962,7 +786,6 @@ void HttpConnection::AdminRequest()
 					{
 						_adminHandler.add_instructor(self,
 							name, college_id);
-
 					});
 
 			}
@@ -982,10 +805,10 @@ void HttpConnection::AdminRequest()
 			auto endWeek		= courseData["endWeek"].asUInt();
 			auto location		= courseData["location"].asString();
 
-			std::string schedule_str = ProcessSchedule(schedule);
+			std::string schedule_str = _dataValidator.isValidSchedule(schedule);
 			// 检验公共部分
 			bool ok = false;
-			if (!DataValidator::isValidSemester(semester))
+			if (!_dataValidator.isValidSemester(semester))
 				SetUnProcessableEntity("Semester Format Error");
 			else if (schedule_str.length() == 0)
 				SetUnProcessableEntity("Schedule Format Error");
@@ -999,31 +822,8 @@ void HttpConnection::AdminRequest()
 				ok = true;
 			if (!ok) return;
 
-			memset(timetable, 0, sizeof timetable); // ok
-			mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-			sess.getSchema("scut_sims");
-			// 教授时间冲突
-			// 获取当前学期的课表
-			mysqlx::RowResult result = sess.sql(
-				"SELECT start_week, end_week, time_slot"
-				"FROM instructors i"
-				"JOIN sections s USING(instructor_id)"
-				"JOIN semesters sm USING(semester_id)"
-				"WHERE instructor_id = 1 AND"
-				"sm.`year` = YEAR(NOW()) AND"
-				"DATE(NOW()) >= DATE_SUB(sm.start_date, INTERVAL 6 MONTH)"
-				"AND DATE(NOW()) <= sm.end_date;"
-			).bind(teacher_id).execute();
-			sess.close();
-
-			// 处理已有的课程
-			for (auto row : result)
-			{
-				ProcessRow(row, 1);
-			}
-
-			ok = ProcessRow(startWeek, endWeek, schedule_str, 1);
-
+			// 新增的课程 不需要去掉原有的时间 section_id 默认参数0
+			ok = _dataValidator.isInstrTimeConflict(teacher_id, startWeek, endWeek, schedule_str);
 			if (!ok)
 			{
 				SetUnProcessableEntity("Course Time Conflict");
@@ -1039,12 +839,11 @@ void HttpConnection::AdminRequest()
 
 				std::transform(type.begin(), type.end(), type.begin(), ::toupper);
 
-				if (course_name.length() == 0 || course_name.length() > 100)
+				if (_dataValidator.isValidName(course_name))
 					SetUnProcessableEntity("Course Name Too Long");
-				else if (credit == 0 || credit > 7)
+				else if (_dataValidator.isValidCredit(credit))
 					SetUnProcessableEntity("Credit == 0 Or Credit > 7");
-				else if (type != "GENERAL REQUIRED" || type != "MAJOR REQUIRED" || type != "MAJOR ELECTIVE" ||
-					type != "UNIVERSITY ELECTIVE" || type != "PRACTICAL")
+				else if (_dataValidator.isValidType(type))
 					SetUnProcessableEntity("Type Error");
 				else 
 					ok = true;
@@ -1096,55 +895,22 @@ void HttpConnection::AdminRequest()
 			auto endWeek = courseData["endWeek"].asUInt();
 			auto location = courseData["location"].asString();
 
-			auto schedule_str = ProcessSchedule(schedule);
+			auto schedule_str = _dataValidator.isValidSchedule(schedule);
 
 			bool ok = false;
 			if (schedule_str.length() == 0)
 				SetUnProcessableEntity("Schedule Format Error");
-			else if (startWeek == 0 || startWeek > 20 || endWeek == 0 || endWeek > 20 || startWeek > endWeek)
+			else if (_dataValidator.isValidWeek(startWeek, endWeek) )
 				SetUnProcessableEntity("startWeek or endWeek Error");
-			else if (location.length() <= 4 || location.length() > 100)
+			else if (_dataValidator.isValidLocation(location))
 				SetUnProcessableEntity("location.length() <= 4 || location.length() > 100");
 			else
 				ok = true;
 
-			memset(timetable, 0, sizeof timetable); // ok
-			mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-			sess.getSchema("scut_sims");
-			// 教授时间冲突
-			// 获取当前学期的课表
-			mysqlx::RowResult result = sess.sql(
-				"SELECT start_week, end_week, time_slot"
-				"FROM instructors i"
-				"JOIN sections s USING(instructor_id)"
-				"JOIN semesters sm USING(semester_id)"
-				"WHERE instructor_id = 1 AND"
-				"sm.`year` = YEAR(NOW()) AND"
-				"DATE(NOW()) >= DATE_SUB(sm.start_date, INTERVAL 6 MONTH)"
-				"AND DATE(NOW()) <= sm.end_date;"
-			).bind(teacher_id).execute();
+			if (!ok) return;
 
-			// 要去掉原本的课程安排
-			auto row = sess.sql(
-				"SELECT start_week, end_week, time_slot"
-				"FROM sections "
-				"WHERE section_id = ?;"
-			).bind(section_id).execute().fetchOne();
-			sess.close();
-
-			auto m_startWeek = row[0].get<uint32_t>();
-			auto m_endWeek = row[1].get<uint32_t>();
-			auto m_timeSlot = row[2].get<std::string>();
-			ProcessRow(m_startWeek, m_endWeek, m_timeSlot, 0);
-
-			// 处理已有的课程
-			for (auto row : result)
-			{
-				ProcessRow(row, 1);
-			}
-			
-
-			ok = ProcessRow(startWeek, endWeek, schedule_str, 1);
+			// 修改课程时间 检查时间冲突 需要去掉当前课程的时间
+			ok = _dataValidator.isInstrTimeConflict(teacher_id, startWeek, endWeek, schedule_str, section_id);
 
 			if (!ok)
 			{
@@ -1187,7 +953,7 @@ void HttpConnection::AdminRequest()
 		// 5.删除某些课程/api/admin_courseManage/deleteCourse
 		if (target == "/api/admin_courseManage/deleteCourse")
 		{
-			std::vector<uint32_t> section_id;
+			std::vector<uint32_t> section_ids;
 			auto& section = recv["section_id"];
 			mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 
@@ -1195,23 +961,18 @@ void HttpConnection::AdminRequest()
 			for (const auto& item : section)
 			{
 				uint32_t id = stoull(item["section_id"].asString());
-				auto row = sess.sql(
-					"SELECT 1 FROM sections sc "
-					"JOIN semesters sm USING (semester_id)"
-					"WHERE sc.section_id = ? AND "
-					"sm.`year` = YEAR(NOW()) AND "
-					"MONTH(sm.start_date) >= IF(MONTH(NOW()) >= 7, 7, 0);")
-					.bind(id).execute().fetchOne();
-
-				if (row.isNull())
-					SetUnProcessableEntity("section_id error: id is " + std::to_string(id));
+				if (_dataValidator.isValidSectionId(id))
+				{
+					SetUnProcessableEntity("section_id error");
+					return;
+				}
 				else
-					section_id.push_back(id);
+					section_ids.push_back(id);
 			}
 
-			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), section_id = std::move(section_id)]()
+			LogicSystem::Instance().PushToQue([this, self = shared_from_this(), section_ids = std::move(section_ids)]()
 				{
-					_adminHandler.del_section(self, section_id);
+					_adminHandler.del_section(self, section_ids);
 				});
 		}
 		else
@@ -1226,57 +987,13 @@ void HttpConnection::AdminRequest()
 	}
 }
 
-
-std::string HttpConnection::ProcessSchedule(const Json::Value& schedule)
-{
-	if (!schedule.isArray()) {
-		return "";
-	}
-
-	std::ostringstream oss;
-	bool first = true;
-
-	static std::unordered_set<std::string> validDays = {
-		GetUTF8ForDatabase(L"周一"), GetUTF8ForDatabase(L"周二"),
-		GetUTF8ForDatabase(L"周三"), GetUTF8ForDatabase(L"周四"),
-		GetUTF8ForDatabase(L"周五"), GetUTF8ForDatabase(L"周六"),
-		GetUTF8ForDatabase(L"周日"),
-	};
-
-	for (auto& row : schedule)
-	{
-		if (row.isObject() &&
-			row.isMember("day") && row["day"].isString() &&
-			row.isMember("time") && row["time"].isString())
-		{
-			auto day = row["day"].asString();
-			auto time = row["time"].asString();
-			if (validDays.find(day) == validDays.end())
-				return "";
-
-			std::string_view vtime = time;
-			if (vtime.length() != 7 || vtime[1] != '-' || !std::isdigit(vtime[0]) || !std::isdigit(vtime[2]) ||
-				vtime.substr(3) != GetUTF8ForDatabase(L"节"))
-				return "";
-
-			if (!first) 
-				oss << ",";
-
-			oss << row["day"].asString() << " " << row["time"].asString();
-			first = false;
-		}
-		else
-			return "";
-	}
-	return oss.str();
-}
-
 void HttpConnection::CloseConnection() noexcept
 {
 	_socket.close();
 	_server.ClearConnection(_uuid);
 }
 
+DataValidator HttpConnection::_dataValidator;
 MysqlStReqHandler HttpConnection::_studentHandler;
 MysqlInstrReqHandler HttpConnection::_instructorHandler;
 MysqlAdmReqHandler HttpConnection::_adminHandler;

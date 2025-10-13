@@ -89,6 +89,15 @@ void MysqlStReqHandler::register_course(std::shared_ptr<HttpConnection> con, uin
 	// 2.ÈËÊý³åÍ»
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	mysqlx::Table sections = sess.getSchema("scut_sims").getTable("sections");
+	auto row = sections.select("1").where("section_id = :sid AND `number` < max_capacity")
+		.bind("sid", section_id)
+		.execute().fetchOne();
+
+	if (row.isNull())
+	{
+		con->SetUnProcessableEntity("Section Full");
+		return;
+	}
 
 	sess.sql("CALL st_register_course(?,?)").bind(id).bind(section_id).execute();
 	root["result"] = true;

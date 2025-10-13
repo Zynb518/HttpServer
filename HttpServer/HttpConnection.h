@@ -10,6 +10,7 @@
 #include "MysqlStReqHandler.h"
 #include "MysqlInstrReqHandler.h"
 #include "MysqlAdmReqHandler.h"
+#include "DataValidator.h"
 
 namespace beast = boost::beast;
 class HttpServer;
@@ -43,15 +44,9 @@ private:
 	// 解析HTTP request
 	void HandleRead(); 
 	void StudentRequest();
-	bool ProcessRow(const mysqlx::Row& row, size_t choice);
-	// 处理 startWeek, endWeek, schedule的重载, 处理即将要选的课, choice为1检验，choice为0，去1
-	bool ProcessRow(uint32_t start_week, uint32_t end_week, const std::string& time_slot, uint32_t choice);
 
 	void InstructorRequest();
 	void AdminRequest();
-
-	// 带错误处理
-	std::string ProcessSchedule(const Json::Value& schedule);
 
 	void CloseConnection() noexcept;
 
@@ -76,6 +71,9 @@ private:
 	uint32_t _user_id;
 	std::string _password;
 	std::string _role;
+
+	// 验证数据是否准确
+	static DataValidator _dataValidator;
 
 	static MysqlStReqHandler _studentHandler;
 	static MysqlInstrReqHandler _instructorHandler;

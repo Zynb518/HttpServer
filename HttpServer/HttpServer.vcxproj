@@ -71,7 +71,7 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\ProgramData\Microsoft\Windows\Start Menu\Programs\MySQL\mysql-connector-c++-9.4.0-winx64\include;Z:\CppBackEnd\boost_1_88_0;Z:\CppBackEnd\jsoncpp\myjson\include;$(IncludePath)</IncludePath>
+    <IncludePath>Z:\CppBackEnd\BOOST项目\HttpServer\HttpServer\DataValidator;Z:\CppBackEnd\BOOST项目\HttpServer\HttpServer\ReqHander;Z:\CppBackEnd\BOOST项目\HttpServer\HttpServer;C:\ProgramData\Microsoft\Windows\Start Menu\Programs\MySQL\mysql-connector-c++-9.4.0-winx64\include;Z:\CppBackEnd\boost_1_88_0;Z:\CppBackEnd\jsoncpp\myjson\include;$(IncludePath)</IncludePath>
     <LibraryPath>C:\ProgramData\Microsoft\Windows\Start Menu\Programs\MySQL\mysql-connector-c++-9.4.0-winx64\lib64\vs14;Z:\CppBackEnd\jsoncpp\myjson\lib;Z:\CppBackEnd\boost_1_88_0\stage\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -135,35 +135,52 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="MysqlAdmReqHandler.cpp" />
-    <ClCompile Include="AdmReqHandler.cpp" />
+    <ClCompile Include="DataValidator\AdmDataValidator.cpp" />
+    <ClCompile Include="DataValidator\DataValidator.cpp" />
+    <ClCompile Include="DataValidator\InstrDataValidator.cpp" />
+    <ClCompile Include="DataValidator\MysqlAdmDataValidator.cpp" />
+    <ClCompile Include="DataValidator\MysqlInstrDataValidator.cpp" />
+    <ClCompile Include="DataValidator\MysqlStDataValidator.cpp" />
+    <ClCompile Include="ReqHander\MysqlAdmReqHandler.cpp" />
+    <ClCompile Include="ReqHander\AdmReqHandler.cpp" />
     <ClCompile Include="HttpConnection.cpp" />
     <ClCompile Include="HttpServer.cpp" />
-    <ClCompile Include="InstrReqHandler.cpp" />
-    <ClCompile Include="MysqlInstrReqHandler.cpp" />
+    <ClCompile Include="ReqHander\InstrReqHandler.cpp" />
+    <ClCompile Include="ReqHander\MysqlInstrReqHandler.cpp" />
     <ClCompile Include="IOServicePool.cpp" />
     <ClCompile Include="LogicSystem.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MysqlConnectionPool.cpp" />
-    <ClCompile Include="StReqHandler.cpp" />
-    <ClCompile Include="MysqlStReqHandler.cpp" />
+    <ClCompile Include="ReqHander\StReqHandler.cpp" />
+    <ClCompile Include="ReqHander\MysqlStReqHandler.cpp" />
+    <ClCompile Include="DataValidator\StDataValidator.cpp" />
     <ClCompile Include="Tools.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="MysqlAdmReqHandler.h" />
-    <ClInclude Include="AdmReqHandler.h" />
+    <ClInclude Include="DataValidator\AdmDataValidator.h" />
+    <ClInclude Include="DataValidator\DataValidator.h" />
+    <ClInclude Include="DataValidator\InstrDataValidator.h" />
+    <ClInclude Include="DataValidator\MysqlAdmDataValidator.h" />
+    <ClInclude Include="DataValidator\MysqlInstrDataValidator.h" />
+    <ClInclude Include="DataValidator\MysqlStDataValidator.h" />
+    <ClInclude Include="ReqHander\MysqlAdmReqHandler.h" />
+    <ClInclude Include="ReqHander\AdmReqHandler.h" />
     <ClInclude Include="HttpConnection.h" />
     <ClInclude Include="HttpServer.h" />
-    <ClInclude Include="InstrReqHandler.h" />
-    <ClInclude Include="MysqlInstrReqHandler.h" />
+    <ClInclude Include="ReqHander\InstrReqHandler.h" />
+    <ClInclude Include="ReqHander\MysqlInstrReqHandler.h" />
     <ClInclude Include="IOServicePool.h" />
     <ClInclude Include="Log.h" />
     <ClInclude Include="LogicSystem.h" />
     <ClInclude Include="MysqlConnectionPool.h" />
-    <ClInclude Include="RequestHandler.h" />
-    <ClInclude Include="StReqHandler.h" />
-    <ClInclude Include="MysqlStReqHandler.h" />
+    <ClInclude Include="ReqHander\RequestHandler.h" />
+    <ClInclude Include="ReqHander\StReqHandler.h" />
+    <ClInclude Include="ReqHander\MysqlStReqHandler.h" />
+    <ClInclude Include="DataValidator\StDataValidator.h" />
     <ClInclude Include="Tools.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ClassDiagram.cd" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
