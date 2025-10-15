@@ -7,9 +7,6 @@
 #include "RequestDispatcher.h"
 #include "Tools.h"
 
-#include <boost/beast/core.hpp>
-#include <boost/core/ignore_unused.hpp>
-#include <boost/system/error_code.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 

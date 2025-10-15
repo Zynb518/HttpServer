@@ -1,7 +1,7 @@
 #pragma once
 
 #include <boost/asio.hpp>
-#include <boost/beast/http.hpp>
+#include <boost/beast.hpp>
 #include <json/json.h>
 
 #include <memory>

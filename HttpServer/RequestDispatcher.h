@@ -1,8 +1,15 @@
 #pragma once
 
-#include <boost/beast/core/buffers_to_string.hpp>
-#include <boost/beast/http.hpp>
+#include <boost/asio.hpp>
+#include <boost/beast.hpp>
 #include <json/json.h>
+
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
 
 namespace beast = boost::beast;
 
@@ -10,7 +17,7 @@ class HttpConnection;
 class MysqlStReqHandler;
 class MysqlInstrReqHandler;
 class MysqlAdmReqHandler;
-class DataValidator;
+#include "DataValidator.h"
 
 class RequestDispatcher
 {
@@ -56,7 +63,10 @@ private:
     Resolved ResolveAdminDelete(std::string_view target);
 
     template<typename Functor>
-    std::optional<Task> MakeTask(Functor&& functor) noexcept;
+    std::optional<Task> MakeTask(Functor&& functor) noexcept
+    {
+        return std::optional<Task>{ Task(std::forward<Functor>(functor)) };
+    }
 
     void ReportInvalid(std::string_view reason);
     bool ParseRequestBody(Json::Value& out);

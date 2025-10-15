@@ -5,6 +5,11 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <algorithm>
+#include <utility>
+#include <vector>  // 
+#include <cctype>     // 
+
 
 #include "HttpConnection.h"
 #include "LogicSystem.h"
@@ -16,7 +21,7 @@
 #include "Log.h"
 
 
-inline RequestDispatcher::RequestDispatcher(
+RequestDispatcher::RequestDispatcher(
     std::shared_ptr<HttpConnection> connection,
     beast::http::request<beast::http::dynamic_body>& request,
     MysqlStReqHandler& studentHandler,
@@ -30,7 +35,7 @@ inline RequestDispatcher::RequestDispatcher(
 {
 }
 
-inline RequestDispatcher::DispatchResult RequestDispatcher::Dispatch()
+RequestDispatcher::DispatchResult RequestDispatcher::Dispatch()
 {
     DispatchResult result{};
     auto resolved = Resolve();
@@ -48,7 +53,7 @@ inline RequestDispatcher::DispatchResult RequestDispatcher::Dispatch()
     return result;
 }
 
-inline std::optional<RequestDispatcher::Task> RequestDispatcher::ResolveTaskOnly()
+std::optional<RequestDispatcher::Task> RequestDispatcher::ResolveTaskOnly()
 {
     auto resolved = Resolve();
     if (!resolved.matched)
@@ -58,7 +63,7 @@ inline std::optional<RequestDispatcher::Task> RequestDispatcher::ResolveTaskOnly
     return resolved.task;
 }
 
-inline RequestDispatcher::Resolved RequestDispatcher::Resolve()
+RequestDispatcher::Resolved RequestDispatcher::Resolve()
 {
     Resolved resolved{};
     const std::string_view target{ _request.target().data(), _request.target().size() };
@@ -87,7 +92,7 @@ inline RequestDispatcher::Resolved RequestDispatcher::Resolve()
     return resolved;
 }
 
-inline RequestDispatcher::Resolved RequestDispatcher::ResolveStudent(std::string_view target)
+RequestDispatcher::Resolved RequestDispatcher::ResolveStudent(std::string_view target)
 {
     switch (_request.method())
     {
@@ -101,7 +106,7 @@ inline RequestDispatcher::Resolved RequestDispatcher::ResolveStudent(std::string
     }
 }
 
-inline RequestDispatcher::Resolved RequestDispatcher::ResolveStudentGet(std::string_view target)
+RequestDispatcher::Resolved RequestDispatcher::ResolveStudentGet(std::string_view target)
 {
     const auto userId = _connection->GetUserId();
 
@@ -162,7 +167,7 @@ inline RequestDispatcher::Resolved RequestDispatcher::ResolveStudentGet(std::str
     return Resolved{ true, std::nullopt };
 }
 
-inline RequestDispatcher::Resolved RequestDispatcher::ResolveStudentPost(std::string_view target)
+RequestDispatcher::Resolved RequestDispatcher::ResolveStudentPost(std::string_view target)
 {
     Json::Value payload;
     if (!ParseRequestBody(payload))
@@ -240,7 +245,7 @@ inline RequestDispatcher::Resolved RequestDispatcher::ResolveStudentPost(std::st
     return Resolved{ true, std::nullopt };
 }
 
-inline RequestDispatcher::Resolved RequestDispatcher::ResolveInstructor(std::string_view target)
+RequestDispatcher::Resolved RequestDispatcher::ResolveInstructor(std::string_view target)
 {
     switch (_request.method())
     {
@@ -254,7 +259,7 @@ inline RequestDispatcher::Resolved RequestDispatcher::ResolveInstructor(std::str
     }
 }
 
-inline RequestDispatcher::Resolved RequestDispatcher::ResolveInstructorGet(std::string_view target)
+RequestDispatcher::Resolved RequestDispatcher::ResolveInstructorGet(std::string_view target)
 {
     const auto userId = _connection->GetUserId();
 
@@ -311,7 +316,7 @@ inline RequestDispatcher::Resolved RequestDispatcher::ResolveInstructorGet(std::
     return Resolved{ true, std::nullopt };
 }
 
-inline RequestDispatcher::Resolved RequestDispatcher::ResolveInstructorPost(std::string_view target)
+RequestDispatcher::Resolved RequestDispatcher::ResolveInstructorPost(std::string_view target)
 {
     Json::Value payload;
     if (!ParseRequestBody(payload))
@@ -384,7 +389,7 @@ inline RequestDispatcher::Resolved RequestDispatcher::ResolveInstructorPost(std:
     return Resolved{ true, std::nullopt };
 }
 
-inline RequestDispatcher::Resolved RequestDispatcher::ResolveAdmin(std::string_view target)
+RequestDispatcher::Resolved RequestDispatcher::ResolveAdmin(std::string_view target)
 {
     switch (_request.method())
     {
@@ -402,7 +407,7 @@ inline RequestDispatcher::Resolved RequestDispatcher::ResolveAdmin(std::string_v
     }
 }
 
-inline RequestDispatcher::Resolved RequestDispatcher::ResolveAdminGet(std::string_view target)
+RequestDispatcher::Resolved RequestDispatcher::ResolveAdminGet(std::string_view target)
 {
     constexpr std::string_view accountRolePrefix = "/api/admin_accountManage/getInfo?role=";
     if (StartsWith(target, accountRolePrefix))
@@ -575,7 +580,7 @@ inline RequestDispatcher::Resolved RequestDispatcher::ResolveAdminGet(std::strin
     return Resolved{ true, std::nullopt };
 }
 
-inline RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPost(std::string_view target)
+RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPost(std::string_view target)
 {
     Json::Value payload;
     if (!ParseRequestBody(payload))
@@ -820,13 +825,13 @@ inline RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPost(std::stri
     return Resolved{ true, std::nullopt };
 }
 
-inline RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPut(std::string_view)
+RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPut(std::string_view)
 {
     ReportInvalid("AdminRequest Wrong Method");
     return Resolved{ true, std::nullopt };
 }
 
-inline RequestDispatcher::Resolved RequestDispatcher::ResolveAdminDelete(std::string_view target)
+RequestDispatcher::Resolved RequestDispatcher::ResolveAdminDelete(std::string_view target)
 {
     Json::Value payload;
     if (!ParseRequestBody(payload))
@@ -867,30 +872,24 @@ inline RequestDispatcher::Resolved RequestDispatcher::ResolveAdminDelete(std::st
     return Resolved{ true, std::nullopt };
 }
 
-template<typename Functor>
-inline std::optional<RequestDispatcher::Task> RequestDispatcher::MakeTask(Functor&& functor) noexcept
-{
-    return std::optional<Task>{ Task(std::forward<Functor>(functor)) };
-}
 
-inline void RequestDispatcher::ReportInvalid(std::string_view reason)
+void RequestDispatcher::ReportInvalid(std::string_view reason)
 {
     _connection->SetUnProcessableEntity(std::string(reason));
 }
 
-inline bool RequestDispatcher::ParseRequestBody(Json::Value& out)
+bool RequestDispatcher::ParseRequestBody(Json::Value& out)
 {
     auto& body = _request.body();
     auto raw = beast::buffers_to_string(body.data());
     return ParseUserData(raw, out);
 }
-
-inline bool RequestDispatcher::StartsWith(std::string_view text, std::string_view prefix) noexcept
+bool RequestDispatcher::StartsWith(std::string_view text, std::string_view prefix) noexcept
 {
     return text.size() >= prefix.size() && text.substr(0, prefix.size()) == prefix;
 }
 
-inline bool RequestDispatcher::ParseUserData(const std::string& body, Json::Value& out)
+bool RequestDispatcher::ParseUserData(const std::string& body, Json::Value& out)
 {
     std::unique_ptr<Json::CharReader> jsonReader(_readerBuilder.newCharReader());
     std::string err;
@@ -902,5 +901,5 @@ inline bool RequestDispatcher::ParseUserData(const std::string& body, Json::Valu
     return true;
 }
 
-inline DataValidator RequestDispatcher::_dataValidator{};
-inline Json::CharReaderBuilder RequestDispatcher::_readerBuilder{};
+DataValidator RequestDispatcher::_dataValidator{};
+Json::CharReaderBuilder RequestDispatcher::_readerBuilder{};

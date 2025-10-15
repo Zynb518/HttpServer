@@ -57,22 +57,7 @@
     <ClCompile Include="DataValidator\DataValidator.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="DataValidator\StDataValidator.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="DataValidator\InstrDataValidator.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="DataValidator\AdmDataValidator.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="DataValidator\MysqlAdmDataValidator.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="DataValidator\MysqlInstrDataValidator.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="DataValidator\MysqlStDataValidator.cpp">
+    <ClCompile Include="RequestDispatcher.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
@@ -120,27 +105,6 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="DataValidator\DataValidator.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="DataValidator\StDataValidator.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="DataValidator\InstrDataValidator.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="DataValidator\AdmDataValidator.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="DataValidator\MysqlAdmDataValidator.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="DataValidator\MysqlInstrDataValidator.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="DataValidator\MysqlStDataValidator.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="RequestDispatcher.cpp">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="RequestDispatcher.h">

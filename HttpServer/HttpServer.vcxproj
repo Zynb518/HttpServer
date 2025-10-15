@@ -135,12 +135,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="DataValidator\AdmDataValidator.cpp" />
     <ClCompile Include="DataValidator\DataValidator.cpp" />
-    <ClCompile Include="DataValidator\InstrDataValidator.cpp" />
-    <ClCompile Include="DataValidator\MysqlAdmDataValidator.cpp" />
-    <ClCompile Include="DataValidator\MysqlInstrDataValidator.cpp" />
-    <ClCompile Include="DataValidator\MysqlStDataValidator.cpp" />
     <ClCompile Include="ReqHander\MysqlAdmReqHandler.cpp" />
     <ClCompile Include="ReqHander\AdmReqHandler.cpp" />
     <ClCompile Include="HttpConnection.cpp" />
@@ -153,16 +148,11 @@
     <ClCompile Include="MysqlConnectionPool.cpp" />
     <ClCompile Include="ReqHander\StReqHandler.cpp" />
     <ClCompile Include="ReqHander\MysqlStReqHandler.cpp" />
-    <ClCompile Include="DataValidator\StDataValidator.cpp" />
     <ClCompile Include="Tools.cpp" />
+    <ClCompile Include="RequestDispatcher.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="DataValidator\AdmDataValidator.h" />
     <ClInclude Include="DataValidator\DataValidator.h" />
-    <ClInclude Include="DataValidator\InstrDataValidator.h" />
-    <ClInclude Include="DataValidator\MysqlAdmDataValidator.h" />
-    <ClInclude Include="DataValidator\MysqlInstrDataValidator.h" />
-    <ClInclude Include="DataValidator\MysqlStDataValidator.h" />
     <ClInclude Include="ReqHander\MysqlAdmReqHandler.h" />
     <ClInclude Include="ReqHander\AdmReqHandler.h" />
     <ClInclude Include="HttpConnection.h" />
@@ -176,9 +166,7 @@
     <ClInclude Include="ReqHander\RequestHandler.h" />
     <ClInclude Include="ReqHander\StReqHandler.h" />
     <ClInclude Include="ReqHander\MysqlStReqHandler.h" />
-    <ClInclude Include="DataValidator\StDataValidator.h" />
     <ClInclude Include="RequestDispatcher.h" />
-    <ClInclude Include="RequestDispatcher.cpp" />
     <ClInclude Include="Tools.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
