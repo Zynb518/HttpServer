@@ -177,10 +177,9 @@
     <ClInclude Include="ReqHander\StReqHandler.h" />
     <ClInclude Include="ReqHander\MysqlStReqHandler.h" />
     <ClInclude Include="DataValidator\StDataValidator.h" />
+    <ClInclude Include="RequestDispatcher.h" />
+    <ClInclude Include="RequestDispatcher.cpp" />
     <ClInclude Include="Tools.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="ClassDiagram.cd" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

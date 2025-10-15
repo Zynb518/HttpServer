@@ -21,8 +21,13 @@ class HttpConnection : public std::enable_shared_from_this<HttpConnection>
 public:
 	HttpConnection(boost::asio::io_context& ioc, HttpServer& server) noexcept;
 	tcp::socket& GetSocket() noexcept;
-	std::string_view GetUuid() noexcept;
+	std::string_view GetUuid() const noexcept;
 	beast::http::response<beast::http::dynamic_body>& GetResponse() noexcept;
+
+	uint32_t GetUserId() const noexcept { return _user_id; }
+	std::string& GetRole() noexcept { return _role; }
+	std::string& GetPassword() noexcept { return _password; }
+
 	void ReadLogin(); // 异步读http登陆请求
 	void StartWrite();
 
@@ -75,9 +80,10 @@ private:
 	// 验证数据是否准确
 	static DataValidator _dataValidator;
 
-	static MysqlStReqHandler _studentHandler;
-	static MysqlInstrReqHandler _instructorHandler;
-	static MysqlAdmReqHandler _adminHandler;
+	// 里面有公共的writer 不能采用static 
+	MysqlStReqHandler _studentHandler;
+	MysqlInstrReqHandler _instructorHandler;
+	MysqlAdmReqHandler _adminHandler;
 
 };
 

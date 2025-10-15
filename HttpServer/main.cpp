@@ -6,6 +6,8 @@
 #include <json/json.h>
 #include <mysqlx/xdevapi.h>
 #include <unordered_map>
+#include <functional>
+#include <string_view>
 
 #include "HttpServer.h"
 #include "MysqlConnectionPool.h"
@@ -23,6 +25,28 @@ int main()
 #endif
         std::string s = GetUTF8ForDatabase(L"2025春");
         std::cout << s.size();
+        // 定义一个 std::unordered_map，以 string_view 为键，std::function 为值
+        std::unordered_map<std::string_view, std::function<void()>> map;
+
+        // 定义一个简单的函数
+        auto func = []() { std::cout << "Hello from the function!" << std::endl; };
+
+        // 向 map 中插入一个键值对，使用 std::string 作为键
+        std::string key = "hello";
+        map[key] = func;
+
+        // 使用 std::string_view 作为键进行查找
+        std::string_view key_view = "hello";
+        auto it = map.find(key_view);
+
+        if (it != map.end()) {
+            // 找到对应的函数并调用
+            it->second();
+        }
+        else {
+            std::cout << "Key not found!" << std::endl;
+        }
+
 
         boost::asio::io_context ioc;
         HttpServer server(ioc, 10086);

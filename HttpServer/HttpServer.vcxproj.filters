@@ -140,8 +140,11 @@
     <ClInclude Include="DataValidator\MysqlStDataValidator.h">
       <Filter>头文件</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="ClassDiagram.cd" />
+    <ClInclude Include="RequestDispatcher.cpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="RequestDispatcher.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

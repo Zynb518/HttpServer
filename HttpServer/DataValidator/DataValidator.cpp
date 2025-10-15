@@ -6,8 +6,6 @@
 #include <unordered_map>
 #include <unordered_set>
 
-bool timetable[22][8][9];
-
 static const std::unordered_map<std::string, int> weekdayMap = {
                 {GetUTF8ForDatabase(L"周一"), 1},
                 {GetUTF8ForDatabase(L"周二"), 2},
@@ -112,7 +110,7 @@ bool DataValidator::isUserExists(uint32_t user_id, StringRef password, StringRef
     }
 }
 
-bool DataValidator::ProcessRow(const mysqlx::Row& row, size_t choice)
+bool DataValidator::ProcessRow(bool timetable[22][8][9], const mysqlx::Row& row, size_t choice)
 {
     auto start_week = row[0].get<uint32_t>();
     auto end_week = row[1].get<uint32_t>();
@@ -122,11 +120,11 @@ bool DataValidator::ProcessRow(const mysqlx::Row& row, size_t choice)
         << "end-week: " << end_week << " "
         << "time_slot: " << time_slot << std::endl);
 
-	return ProcessRow(start_week, end_week, time_slot, choice);
+	return ProcessRow(timetable, start_week, end_week, time_slot, choice);
 }
 
 
-bool DataValidator::ProcessRow(uint32_t start_week, uint32_t end_week, StringRef time_slot, uint32_t choice)
+bool DataValidator::ProcessRow(bool timetable[22][8][9], uint32_t start_week, uint32_t end_week, StringRef time_slot, uint32_t choice)
 {
     std::string_view str_v(time_slot);
 
@@ -235,6 +233,7 @@ std::string DataValidator::isValidSchedule(const Json::Value& schedule)
 
 bool DataValidator::isStTimeConflict(uint32_t user_id, uint32_t section_id)
 {
+	bool timetable[22][8][9];
     memset(timetable, 0, sizeof timetable);
     mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
     sess.getSchema("scut_sims");
@@ -243,42 +242,42 @@ bool DataValidator::isStTimeConflict(uint32_t user_id, uint32_t section_id)
         "SELECT s.start_week, s.end_week, s.time_slot "
         "FROM enrollments e "
         "JOIN sections s USING (section_id) "
-        "WHERE e.student_id = ? AND e.status = 'Enrolling'"
+        "WHERE e.student_id = ? AND e.status = 'Enrolling';"
     ).bind(user_id).execute();
 
     for (auto row : result)
     {
-        ProcessRow(row, 1);
+        ProcessRow(timetable, row, 1);
     }
 
     // 处理即将要选的课程
     auto row = sess.sql(
-        "SELECT start_week, end_week, time_slot"
-        "FROM sections s"
-        "WHERE section_id = ?;"
+        "SELECT start_week, end_week, time_slot "
+        "FROM sections s "
+        "WHERE section_id = ?; "
     ).bind(section_id).execute().fetchOne();
 
-    bool ok = ProcessRow(row, 0);
-    return false;
+    return ProcessRow(timetable, row, 0);
 }
 
 bool DataValidator::isInstrTimeConflict(uint32_t user_id, uint32_t start_week,
     uint32_t end_week, StringRef schedule, uint32_t section_id)
 {
+	bool timetable[22][8][9];
     memset(timetable, 0, sizeof timetable);
     mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
     sess.getSchema("scut_sims");
     // 教授时间冲突
     // 获取当前学期的课表
     mysqlx::RowResult result = sess.sql(
-        "SELECT start_week, end_week, time_slot"
-        "FROM instructors i"
-        "JOIN sections s USING(instructor_id)"
-        "JOIN semesters sm USING(semester_id)"
-        "WHERE instructor_id = 1 AND"
-        "sm.`year` = YEAR(NOW()) AND"
-        "DATE(NOW()) >= DATE_SUB(sm.start_date, INTERVAL 6 MONTH)"
-        "AND DATE(NOW()) <= sm.end_date;"
+        "SELECT start_week, end_week, time_slot "
+        "FROM instructors i "
+        "JOIN sections s USING(instructor_id) "
+        "JOIN semesters sm USING(semester_id) "
+        "WHERE instructor_id = ? AND "
+        "sm.`year` = YEAR(NOW()) AND "
+        "DATE(NOW()) >= DATE_SUB(sm.start_date, INTERVAL 6 MONTH) "
+        "AND DATE(NOW()) <= sm.end_date; "
     ).bind(user_id).execute();
 
     // 要去掉原本的课程安排
@@ -286,7 +285,7 @@ bool DataValidator::isInstrTimeConflict(uint32_t user_id, uint32_t start_week,
     if (section_id != 0)
     {
         row = sess.sql(
-            "SELECT start_week, end_week, time_slot"
+            "SELECT start_week, end_week, time_slot "
             "FROM sections "
             "WHERE section_id = ?;"
         ).bind(section_id).execute().fetchOne();
@@ -296,7 +295,7 @@ bool DataValidator::isInstrTimeConflict(uint32_t user_id, uint32_t start_week,
     // 处理已有的课程
     for (auto row : result)
     {
-        ProcessRow(row, 1);
+        ProcessRow(timetable, row, 1);
     }
 
     if (section_id != 0)
@@ -304,10 +303,10 @@ bool DataValidator::isInstrTimeConflict(uint32_t user_id, uint32_t start_week,
         auto m_startWeek = row[0].get<uint32_t>();
         auto m_endWeek = row[1].get<uint32_t>();
         auto m_timeSlot = row[2].get<std::string>();
-        ProcessRow(m_startWeek, m_endWeek, m_timeSlot, 0);
+        ProcessRow(timetable, m_startWeek, m_endWeek, m_timeSlot, 0);
     }
 
-    return ProcessRow(start_week, end_week, schedule, 1);
+    return ProcessRow(timetable, start_week, end_week, schedule, 1);
 }
 
 bool DataValidator::isValidSectionId(uint32_t section_id)
@@ -317,7 +316,7 @@ bool DataValidator::isValidSectionId(uint32_t section_id)
         auto sections = sess.getSchema("scut_sims");
         auto row = sess.sql(
             "SELECT 1 FROM sections sc "
-            "JOIN semesters sm USING (semester_id)"
+            "JOIN semesters sm USING (semester_id) "
             "WHERE sc.section_id = ? AND "
             "sm.`year` = YEAR(NOW()) AND "
             "MONTH(sm.start_date) >= IF(MONTH(NOW()) >= 7, 7, 0);")

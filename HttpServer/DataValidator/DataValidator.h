@@ -82,7 +82,7 @@ private:
     static bool isValidDateValues(int year, int month, int day);
     static bool isLeapYear(int year);
 
-    bool ProcessRow(const mysqlx::Row& row, size_t choice);
+    bool ProcessRow(bool timetable[22][8][9], const mysqlx::Row& row, size_t choice);
     // 处理 startWeek, endWeek, schedule的重载, 处理即将要选的课, choice为1检验，choice为0，去1
-    bool ProcessRow(uint32_t start_week, uint32_t end_week, StringRef time_slot, uint32_t choice);
+    bool ProcessRow(bool timetable[22][8][9], uint32_t start_week, uint32_t end_week, StringRef time_slot, uint32_t choice);
 };

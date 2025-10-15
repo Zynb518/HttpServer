@@ -55,7 +55,7 @@ LogicSystem::LogicSystem() noexcept
 
 LogicSystem::~LogicSystem() noexcept
 {
+	Stop();
 	if(_worker.joinable())
 		_worker.join();
 }
-

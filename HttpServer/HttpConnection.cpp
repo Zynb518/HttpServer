@@ -25,7 +25,7 @@ boost::asio::ip::tcp::socket& HttpConnection::GetSocket() noexcept
 	return _socket;
 }
 
-std::string_view HttpConnection::GetUuid() noexcept
+std::string_view HttpConnection::GetUuid() const noexcept
 {
 	return _uuid;
 }
@@ -994,6 +994,6 @@ void HttpConnection::CloseConnection() noexcept
 }
 
 DataValidator HttpConnection::_dataValidator;
-MysqlStReqHandler HttpConnection::_studentHandler;
-MysqlInstrReqHandler HttpConnection::_instructorHandler;
-MysqlAdmReqHandler HttpConnection::_adminHandler;
+// MysqlStReqHandler HttpConnection::_studentHandler;
+// MysqlInstrReqHandler HttpConnection::_instructorHandler;
+// MysqlAdmReqHandler HttpConnection::_adminHandler;
