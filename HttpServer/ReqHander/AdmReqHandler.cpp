@@ -20,8 +20,10 @@ void AdmReqHandler::ParseTimeString(std::string_view str_v, Json::Value& timeArr
 		else
 		{
 			timeObj["time"] = std::string(str_v);
-			return;
+			timeArr.append(timeObj);
+			break;
 		}
 		timeArr.append(timeObj);
+
 	} while (str_v.size() > 0);
 }

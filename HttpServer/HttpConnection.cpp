@@ -46,12 +46,16 @@ beast::http::response<beast::http::dynamic_body>& HttpConnection::GetResponse() 
 void HttpConnection::ReadLogin()
 {
     LOG_INFO("Start ReadLogin");
+    _request.clear();
+    _request.body().clear();
+    _response.body().clear();
+
     beast::http::async_read(_socket, _buffer, _request,
         [this, self = shared_from_this()](beast::error_code ec, std::size_t bytes_transferred) {
             boost::ignore_unused(bytes_transferred);
             if (!ec)
             {
-                LOG_INFO("---- HandleLogin ---- target: " << _request.target());
+                LOG_INFO("... HandleLogin, target: " << _request.target());
                 if (!HandleLogin())
                 {
                     SetUnProcessableEntity("Login-Failure");
@@ -68,7 +72,12 @@ void HttpConnection::ReadLogin()
 
 void HttpConnection::StartWrite()
 {
-    LOG_INFO("After StartWrite response\n" << _response);
+    
+    if (_response.body().size() < 200)
+        LOG_INFO("StartWrite response: \n" << beast::buffers_to_string(_response.body().data()));
+    else 
+        LOG_INFO("StartWrite response"); // \n" << _response
+
     _response.prepare_payload();
     beast::http::async_write(_socket, _response,
         [this, self = shared_from_this()](beast::error_code ec, std::size_t) {
@@ -135,8 +144,7 @@ bool HttpConnection::HandleLogin()
             _user_id = static_cast<uint32_t>(std::stoul(recv["user_id"].asString()));
             _password = recv["password"].asString();
             _role = recv["role"].asString();
-            if (_role == "teacher") _role = "instructor";
-            if (_role == "admin") _role = "administer";
+            if (_role == "teacher") _role = std::string("instructor");
 
             if (!_dataValidator.isUserExists(_user_id, _password, _role))
             {
@@ -148,13 +156,13 @@ bool HttpConnection::HandleLogin()
             _response.result(beast::http::status::ok);
             Json::Value send;
             send["result"] = true;
-            send["role"] = _role;
+            send["user_id"] = _user_id;
+
             beast::ostream(_response.body()) << Json::writeString(_writerBuilder, send);
             StartWrite();
             return true;
         }
 
-        SetUnProcessableEntity("Unsupported Login Request");
         return false;
     }
     catch (const std::exception& e)
@@ -162,7 +170,8 @@ bool HttpConnection::HandleLogin()
         LOG_ERROR("HandleLogin exception: " << e.what());
         SetBadRequest();
         CloseConnection();
-        return false;
+        // 这里得return true ，使得回调链中断
+        return true;
     }
 }
 
@@ -222,6 +231,9 @@ void HttpConnection::WriteBadResponse() noexcept
 
 void HttpConnection::StartRead()
 {
+    LOG_INFO("StartRead");
+    _request.clear();
+    _request.body().clear();
     _response.body().clear();
 
     beast::http::async_read(_socket, _buffer, _request,
@@ -230,6 +242,7 @@ void HttpConnection::StartRead()
             if (!ec)
             {
                 LOG_INFO("Incoming target: " << self->_request.target());
+                LOG_INFO("Incoming BODY: \n" << beast::buffers_to_string(self->_request.body().data()));
                 self->HandleRead();
             }
             else
@@ -267,7 +280,6 @@ void HttpConnection::HandleRead()
         return;
     }
 
-    StartRead();
 }
 
 void HttpConnection::HandleRouting()
@@ -285,6 +297,7 @@ void HttpConnection::HandleRouting()
 
     if (!result.queued)
     {
+        LOG_INFO("NOT IN QUEUE");
         // 已匹配但未入队 → 说明调度器内部因为校验失败等原因已经写回错误响应，直接返回即可。
         return;
     }
@@ -295,6 +308,7 @@ void HttpConnection::HandleRouting()
 void HttpConnection::CloseConnection() noexcept
 {
     beast::error_code ec;
+	LOG_INFO("CloseConnection: " << _uuid);
     _socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
     _socket.close(ec);
     _server.ClearConnection(_uuid);

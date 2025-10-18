@@ -1,17 +1,3 @@
-ï»¿//
-// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
-//
-// Distributed under the Boost Software License, Version 1.0. (See accompanying
-// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
-//
-// Official repository: https://github.com/boostorg/beast
-//
-
-//------------------------------------------------------------------------------
-//
-// Example: HTTP server, asynchronous
-//
-//------------------------------------------------------------------------------
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -28,10 +14,38 @@
 #include <thread>
 #include <vector>
 #include <string_view>
+
+#include <json/json.h>
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace http = beast::http;           // from <boost/beast/http.hpp>
 namespace net = boost::asio;            // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
+
+// ±àÒëÆÚ UTF-16 µ½ UTF-8 ×ª»»£¨ÊÊÓÃÓÚ»ù±¾¶àÓïÑÔÆ½Ãæ×Ö·û£©
+std::string GetUTF8ForDatabase(std::wstring_view wideStr) noexcept {
+    if (wideStr.empty()) return "";
+
+    std::string result;
+    for (wchar_t wc : wideStr) {
+        if (wc <= 0x7F) {
+            // ASCII ×Ö·û
+            result += static_cast<char>(wc);
+        }
+        else if (wc <= 0x7FF) {
+            // 2×Ö½Ú UTF-8
+            result += static_cast<char>(0xC0 | ((wc >> 6) & 0x1F));
+            result += static_cast<char>(0x80 | (wc & 0x3F));
+        }
+        else if (wc <= 0xFFFF) {
+            // 3×Ö½Ú UTF-8£¨ÊÊÓÃÓÚ»ù±¾¶àÓïÑÔÆ½Ãæ£©
+            result += static_cast<char>(0xE0 | ((wc >> 12) & 0x0F));
+            result += static_cast<char>(0x80 | ((wc >> 6) & 0x3F));
+            result += static_cast<char>(0x80 | (wc & 0x3F));
+        }
+        // ¶ÔÓÚ´úÀí¶Ô£¨surrogate pairs£©ÐèÒª¸ü¸´ÔÓµÄ´¦Àí
+    }
+    return result;
+}
 
 #if 1
 // Performs an HTTP POST with JSON data and prints the response
@@ -39,12 +53,12 @@ int main()
 {
     try
     {
-
-
+#ifdef _WIN32
+        system("chcp 65001 > nul");
+#endif
         // Fixed connection parameters
-        const std::string host = "10.195.145.99";
+        const std::string host = "127.0.0.1";
         const unsigned short port = 10086;
-        const std::string target = "/api/login/post";
         const int version = 11; // HTTP/1.1
 
         // The io_context is required for all I/O
@@ -59,54 +73,58 @@ int main()
         // Make the connection directly to the endpoint
         stream.connect(endpoint);
 
+        Json::Value loginData;
+		loginData["user_id"] = 1;
+		loginData["password"] = "admin";
+		loginData["role"] = "admin";
         // Set up the JSON payload
-        std::string const json_body = "{\"user_id\":2,\"password\":\"student2\",\"role\":\"student\"}";
 
         // Set up an HTTP POST request message
-        http::request<http::string_body> req{ http::verb::post, target, version };
+        http::request<http::dynamic_body> req{ http::verb::post, "/api/login/post" , version };
         req.set(http::field::host, host);
         req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         req.set(http::field::content_type, "application/json");
         req.set(http::field::accept, "application/json");
         req.set(http::field::connection, "keep-alive");
-        req.body() = json_body;
+        beast::ostream(req.body()) << loginData.toStyledString();
         req.prepare_payload();  // This will set Content-Length automatically
-
         // Send the HTTP request to the remote host
         http::write(stream, req);
 
         // This buffer is used for reading and must be persisted
         beast::flat_buffer buffer;
-
         // Declare a container to hold the response
         http::response<http::dynamic_body> res;
-
         // Receive the HTTP response
         http::read(stream, buffer, res);
-
         // Write the message to standard out
+
         std::cout << res << std::endl;
 
         // -------------------------------------------TEST2-------------------------------------------
-        http::request<http::string_body> req2{ http::verb::get, "/api/student_select/get_all", version };
+        std::string s = GetUTF8ForDatabase(L"/api/admin/general/getMajorId?college_id=1");
+		std::cout << s << std::endl;
+        http::request<http::dynamic_body> req2{ http::verb::get, s, version };
         req2.set(http::field::host, host);
         req2.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         req2.set(http::field::content_type, "application/json");
         req2.set(http::field::accept, "application/json");
         req2.set(http::field::connection, "keep-alive");
-        req2.body() = json_body;
+        Json::Value postData;
+
+        beast::ostream(req2.body()) << postData.toStyledString();
         req2.prepare_payload();
         http::write(stream, req2);
 
-        std::cout << "write ok\n";
-        // Gracefully close the socket
         // Receive the HTTP response
-        http::response<http::dynamic_body> res2;
-        http::read(stream, buffer, res2);
-        std::cout << "read ok\n";
+        res.body().clear();
+        http::read(stream, buffer, res);
+        std::cout << "\n";
+		std::string body = beast::buffers_to_string(res.body().data());
         // Write the message to standard out
-        std::cout << res2 << std::endl;
+        std::cout << body << std::endl;
 
+        
 
         beast::error_code ec;
         stream.socket().shutdown(tcp::socket::shutdown_both, ec);

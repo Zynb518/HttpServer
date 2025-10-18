@@ -76,6 +76,7 @@ RequestDispatcher::Resolved RequestDispatcher::Resolve()
     const auto& role = _connection->GetRole();
     if (role == "student")
     {
+        LOG_INFO("ResolveStudent");
         return ResolveStudent(target);
     }
     if (role == "instructor" || role == "teacher")
@@ -110,7 +111,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveStudentGet(std::string_vie
 {
     const auto userId = _connection->GetUserId();
 
-    if (target == "/api/student_infoCheck")
+    if (target == "/api/student_infoCheck/ask")
     {
         return Resolved{ true, MakeTask([handler = &_studentHandler, self = _connection, userId]()
         {
@@ -130,6 +131,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveStudentGet(std::string_vie
     if (StartsWith(target, schedulePrefix))
     {
         std::string semester(target.substr(schedulePrefix.size()));
+        LOG_INFO("tableCheck semester = " << semester);
         if (!_dataValidator.isValidSemester(semester))
         {
             ReportInvalid("Semester Format Wrong!");
@@ -147,7 +149,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveStudentGet(std::string_vie
         }) };
     }
 
-    if (target == "/api/student_scoreCheck")
+    if (target == "/api/student_scoreCheck/ask")
     {
         return Resolved{ true, MakeTask([handler = &_studentHandler, self = _connection, userId]()
         {
@@ -180,7 +182,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveStudentPost(std::string_vi
 
     if (target == "/api/student_select/submit")
     {
-        auto section_id = static_cast<uint32_t>(std::stoul(payload["section_id"].asString()));
+        auto section_id = static_cast<uint32_t>(std::stoi(payload["section_id"].asString()));
 
         if (!_dataValidator.isStTimeConflict(userId, section_id))
         {
@@ -273,6 +275,8 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveInstructorGet(std::string_
             return Resolved{ true, std::nullopt };
         }
 
+
+
         return Resolved{ true, MakeTask([
             handler = &_instructorHandler,
             self = _connection,
@@ -280,6 +284,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveInstructorGet(std::string_
             sem = std::move(semester)
         ]()
         {
+            LOG_INFO("teacher_tableCheck");
             handler->get_teaching_sections(self, userId, sem);
         }) };
     }
@@ -296,6 +301,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveInstructorGet(std::string_
             section_id
         ]()
         {
+            LOG_INFO("GET section students");
             handler->get_section_students(self, section_id);
         }) };
     }
@@ -332,7 +338,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveInstructorPost(std::string
         auto student_id = static_cast<uint32_t>(std::stoul(payload["student_id"].asString()));
         auto section_id = static_cast<uint32_t>(std::stoul(payload["section_id"].asString()));
         auto score = payload["score"].asUInt();
-        if (_dataValidator.isValidScore(score))
+        if (!_dataValidator.isValidScore(score))
         {
             ReportInvalid("Score Range Error");
             return Resolved{ true, std::nullopt };
@@ -354,9 +360,11 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveInstructorPost(std::string
         auto email = payload["email"].asString();
         auto phone = payload["phone"].asString();
         auto password = payload["password"].asString();
-
+		LOG_INFO("College: " << college);
         bool ok = false;
-        if (!_dataValidator.isValidEmail(email))
+        if(!_dataValidator.isValidCollegeId(college))
+            ReportInvalid("College Error");
+		else if (!_dataValidator.isValidEmail(email))
             ReportInvalid("Email Error");
         else if (!_dataValidator.isValidPhone(phone))
             ReportInvalid("Phone Error");
@@ -455,7 +463,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminGet(std::string_view 
     constexpr std::string_view courseStatsPrefix = "/api/admin_scoreCheck/course?section_id=";
     if (StartsWith(target, courseStatsPrefix))
     {
-        uint32_t section_id = static_cast<uint32_t>(std::stoul(std::string(target.substr(courseStatsPrefix.size()))));
+        uint32_t section_id = std::stoul(std::string(target.substr( courseStatsPrefix.size() )));
 
         return Resolved{ true, MakeTask([
             handler = &_adminHandler,
@@ -576,6 +584,20 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminGet(std::string_view 
         }) };
     }
 
+    constexpr std::string_view collegeMajorPrefix = "/api/admin/general/getMajorId?college_id=";
+    if (StartsWith(target, collegeMajorPrefix))
+    {
+        uint32_t college_id = static_cast<uint32_t>(std::stoul(std::string(target.substr(collegeMajorPrefix.size()))));
+        return Resolved{ true, MakeTask([
+            handler = &_adminHandler,
+            self = _connection,
+            college_id
+        ]()
+        {
+            handler->get_college_majors(self, college_id);
+        }) };
+    }
+
     ReportInvalid("AdminRequest Wrong");
     return Resolved{ true, std::nullopt };
 }
@@ -589,42 +611,11 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPost(std::string_view
         return Resolved{ true, std::nullopt };
     }
 
-    if (target == "/api/admin_accountManage/deleteInfo")
-    {
-        std::vector<uint32_t> user_ids;
-        std::vector<std::string> roles;
-        auto& deleteInfo = payload["deleteInfo"];
-        for (const auto& item : deleteInfo)
-        {
-            user_ids.push_back(static_cast<uint32_t>(std::stoul(item["user_id"].asString())));
-            roles.push_back(item["role"].asString());
-        }
-
-        for (const auto& role : roles)
-        {
-            if (!_dataValidator.isValidRole(role))
-            {
-                ReportInvalid("delete Account Role error");
-                return Resolved{ true, std::nullopt };
-            }
-        }
-
-        return Resolved{ true, MakeTask([
-            handler = &_adminHandler,
-            self = _connection,
-            user_ids = std::move(user_ids),
-            roles = std::move(roles)
-        ]() mutable
-        {
-            handler->del_someone(self, user_ids, roles);
-        }) };
-    }
-
     if (target == "/api/admin_accountManage/new")
     {
         auto role = payload["role"].asString();
         auto name = payload["name"].asString();
-        if (_dataValidator.isValidName(name))
+        if (!_dataValidator.isValidName(name))
         {
             ReportInvalid("Name too long or Zero");
             return Resolved{ true, std::nullopt };
@@ -635,12 +626,12 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPost(std::string_view
             auto gender = payload["gender"].asString();
             auto grade = payload["grade"].asUInt();
             auto major_id = static_cast<uint32_t>(std::stoul(payload["major_id"].asString()));
-            auto college_id = payload["college_id"].asUInt();
+            auto college_id = static_cast<uint32_t>(std::stoul(payload["college_id"].asString()));
 
             bool ok = false;
-            if (_dataValidator.isValidGender(gender))
+            if (!_dataValidator.isValidGender(gender))
                 ReportInvalid("Gender Error");
-            else if (_dataValidator.isValidGrade(grade))
+            else if (!_dataValidator.isValidGrade(grade))
                 ReportInvalid("Grade Error");
             else
                 ok = true;
@@ -684,24 +675,25 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPost(std::string_view
         auto& courseData = payload["courseData"];
 
         auto semester = courseData["semester"].asString();
-        auto teacher_id = courseData["teacher_id"].asUInt();
+        auto teacher_id = static_cast<uint32_t>( stoul(courseData["teacher_id"].asString()) );
         auto& schedule = courseData["schedule"];
         auto max_capacity = courseData["max_capacity"].asUInt();
         auto startWeek = courseData["startWeek"].asUInt();
         auto endWeek = courseData["endWeek"].asUInt();
         auto location = courseData["location"].asString();
 
+        LOG_INFO("OK1");
         std::string schedule_str = _dataValidator.isValidSchedule(schedule);
         bool ok = false;
         if (!_dataValidator.isValidSemester(semester))
             ReportInvalid("Semester Format Error");
         else if (schedule_str.length() == 0)
             ReportInvalid("Schedule Format Error");
-        else if (max_capacity < 30 || max_capacity > 150)
+        else if (!_dataValidator.isValidCapacity(max_capacity))
             ReportInvalid("max_capacity < 30 || max_capacity > 150");
-        else if (startWeek == 0 || startWeek > 20 || endWeek == 0 || endWeek > 20 || startWeek > endWeek)
+        else if (!_dataValidator.isValidWeek(startWeek, endWeek))
             ReportInvalid("startWeek or endWeek Error");
-        else if (location.length() <= 4 || location.length() > 100)
+        else if (!_dataValidator.isValidLocation(location))
             ReportInvalid("location.length() <= 4 || location.length() > 100");
         else
             ok = true;
@@ -720,18 +712,18 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPost(std::string_view
 
         if (courseData["course_id"].asString().empty())
         {
-            auto college_id = courseData["college_id"].asUInt();
+            auto college_id = static_cast<uint32_t>( stoul(courseData["college_id"].asString()) );
             auto course_name = courseData["course_name"].asString();
             auto credit = courseData["credit"].asUInt();
             auto type = courseData["type"].asString();
 
             std::transform(type.begin(), type.end(), type.begin(), ::toupper);
 
-            if (_dataValidator.isValidName(course_name))
+            if (!_dataValidator.isValidName(course_name))
                 ReportInvalid("Course Name Too Long");
-            else if (_dataValidator.isValidCredit(credit))
+            else if (!_dataValidator.isValidCredit(credit))
                 ReportInvalid("Credit == 0 Or Credit > 7");
-            else if (_dataValidator.isValidType(type))
+            else if (!_dataValidator.isValidType(type))
                 ReportInvalid("Type Error");
             else
                 ok = true;
@@ -758,7 +750,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPost(std::string_view
         }
         else
         {
-            auto course_id = courseData["course_id"].asUInt();
+            auto course_id = static_cast<uint32_t>( stoul(courseData["course_id"].asString()) );
 
             return Resolved{ true, MakeTask([
                 =,
@@ -778,8 +770,8 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPost(std::string_view
     if (target == "/api/admin_courseManage/changeCourse")
     {
         auto& courseData = payload["courseData"];
-        auto section_id = courseData["section_id"].asUInt();
-        auto teacher_id = courseData["teacher_id"].asUInt();
+        auto section_id = static_cast<uint32_t>( stoul(courseData["section_id"].asString()) );
+        auto teacher_id = static_cast<uint32_t>( stoul(courseData["teacher_id"].asString()) );
         auto& schedule = courseData["schedule"];
         auto startWeek = courseData["startWeek"].asUInt();
         auto endWeek = courseData["endWeek"].asUInt();
@@ -790,9 +782,9 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPost(std::string_view
         bool ok = false;
         if (schedule_str.length() == 0)
             ReportInvalid("Schedule Format Error");
-        else if (_dataValidator.isValidWeek(startWeek, endWeek))
+        else if (!_dataValidator.isValidWeek(startWeek, endWeek))
             ReportInvalid("startWeek or endWeek Error");
-        else if (_dataValidator.isValidLocation(location))
+        else if (!_dataValidator.isValidLocation(location))
             ReportInvalid("location.length() <= 4 || location.length() > 100");
         else
             ok = true;
@@ -840,17 +832,46 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminDelete(std::string_vi
         return Resolved{ true, std::nullopt };
     }
 
+    if (target == "/api/admin_accountManage/deleteInfo")
+    {
+        std::vector<uint32_t> user_ids;
+        std::vector<std::string> roles;
+        auto& deleteInfo = payload["deleteInfo"];
+        for (const auto& item : deleteInfo)
+        {
+            user_ids.push_back(static_cast<uint32_t>(std::stoul(item["user_id"].asString())));
+            roles.push_back(item["role"].asString());
+        }
+
+        for (const auto& role : roles)
+        {
+            if (!_dataValidator.isValidRole(role))
+            {
+                ReportInvalid("delete Account Role error");
+                return Resolved{ true, std::nullopt };
+            }
+        }
+
+        return Resolved{ true, MakeTask([
+            handler = &_adminHandler,
+            self = _connection,
+            user_ids = std::move(user_ids),
+            roles = std::move(roles)
+        ]() mutable
+        {
+            handler->del_someone(self, user_ids, roles);
+        }) };
+    }
+
     if (target == "/api/admin_courseManage/deleteCourse")
     {
         std::vector<uint32_t> section_ids;
         auto& section = payload["section_id"];
-        mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-        (void)sess;
 
         for (const auto& item : section)
         {
-            uint32_t id = static_cast<uint32_t>(std::stoull(item["section_id"].asString()));
-            if (_dataValidator.isValidSectionId(id))
+            uint32_t id = static_cast<uint32_t>(std::stoul(item.asString()));
+            if (!_dataValidator.isValidSectionId(id))
             {
                 ReportInvalid("section_id error");
                 return Resolved{ true, std::nullopt };

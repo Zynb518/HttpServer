@@ -55,6 +55,7 @@ public:
 
 	virtual void get_college_instructors(std::shared_ptr<HttpConnection> con, uint32_t college_id) = 0;
 
+	virtual void get_college_majors(std::shared_ptr<HttpConnection> con, uint32_t college_id) = 0;
 protected:
 	void ParseTimeString(std::string_view str_v, Json::Value& timeArr);
 	Json::StreamWriterBuilder _writer;

@@ -66,6 +66,7 @@ bool DataValidator::isValidSemester(StringRef semester)
     // 检查长度
     if (semester.length() != 7)
         return false;
+    // LOG_INFO("LENGTH = 7");
 
     // 检查前两个字符必须是"20"
     if (semester[0] != '2' || semester[1] != '0')
@@ -75,10 +76,12 @@ bool DataValidator::isValidSemester(StringRef semester)
     if (!std::isdigit(semester[2]) || !std::isdigit(semester[3]))
         return false;
 
+    // LOG_INFO("20XX");
+
     static const std::string spring = GetUTF8ForDatabase(L"春");
     static const std::string autumn = GetUTF8ForDatabase(L"秋");
     // 检查最后一个字符必须是'春'或'秋'
-    std::string_view t(semester.substr(4));
+    std::string_view t(semester.data() + 4);
     if (t != spring && t != autumn)
         return false;
 
@@ -110,6 +113,7 @@ bool DataValidator::isUserExists(uint32_t user_id, StringRef password, StringRef
     }
 }
 
+// 1 是填充课程
 bool DataValidator::ProcessRow(bool timetable[22][8][9], const mysqlx::Row& row, size_t choice)
 {
     auto start_week = row[0].get<uint32_t>();
@@ -123,7 +127,7 @@ bool DataValidator::ProcessRow(bool timetable[22][8][9], const mysqlx::Row& row,
 	return ProcessRow(timetable, start_week, end_week, time_slot, choice);
 }
 
-
+// 0 是去掉课程
 bool DataValidator::ProcessRow(bool timetable[22][8][9], uint32_t start_week, uint32_t end_week, StringRef time_slot, uint32_t choice)
 {
     std::string_view str_v(time_slot);
@@ -213,16 +217,15 @@ std::string DataValidator::isValidSchedule(const Json::Value& schedule)
             auto time = row["time"].asString();
             if (validDays.find(day) == validDays.end())
                 return "";
-
             std::string_view vtime = time;
-            if (vtime.length() != 7 || vtime[1] != '-' || !std::isdigit(vtime[0]) || !std::isdigit(vtime[2]) ||
+            if (vtime.length() != 6 || vtime[1] != '-' || !std::isdigit(vtime[0]) || !std::isdigit(vtime[2]) ||
                 vtime.substr(3) != GetUTF8ForDatabase(L"节"))
                 return "";
 
             if (!first)
                 oss << ",";
 
-            oss << row["day"].asString() << " " << row["time"].asString();
+            oss << day << " " << time;
             first = false;
         }
         else
@@ -236,7 +239,6 @@ bool DataValidator::isStTimeConflict(uint32_t user_id, uint32_t section_id)
 	bool timetable[22][8][9];
     memset(timetable, 0, sizeof timetable);
     mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-    sess.getSchema("scut_sims");
     // 处理已经选的课程
     mysqlx::RowResult result = sess.sql(
         "SELECT s.start_week, s.end_week, s.time_slot "
@@ -257,7 +259,7 @@ bool DataValidator::isStTimeConflict(uint32_t user_id, uint32_t section_id)
         "WHERE section_id = ?; "
     ).bind(section_id).execute().fetchOne();
 
-    return ProcessRow(timetable, row, 0);
+    return ProcessRow(timetable, row, 1);
 }
 
 bool DataValidator::isInstrTimeConflict(uint32_t user_id, uint32_t start_week,
@@ -266,7 +268,6 @@ bool DataValidator::isInstrTimeConflict(uint32_t user_id, uint32_t start_week,
 	bool timetable[22][8][9];
     memset(timetable, 0, sizeof timetable);
     mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-    sess.getSchema("scut_sims");
     // 教授时间冲突
     // 获取当前学期的课表
     mysqlx::RowResult result = sess.sql(
@@ -280,15 +281,15 @@ bool DataValidator::isInstrTimeConflict(uint32_t user_id, uint32_t start_week,
         "AND DATE(NOW()) <= sm.end_date; "
     ).bind(user_id).execute();
 
-    // 要去掉原本的课程安排
+    // 如果老师不变， 要去掉原本的课程安排
 	mysqlx::Row row;
     if (section_id != 0)
     {
         row = sess.sql(
             "SELECT start_week, end_week, time_slot "
             "FROM sections "
-            "WHERE section_id = ?;"
-        ).bind(section_id).execute().fetchOne();
+            "WHERE section_id = ? AND instructor_id = ?;"
+        ).bind(section_id).bind(user_id).execute().fetchOne();
     }
     sess.close();
 
@@ -298,7 +299,8 @@ bool DataValidator::isInstrTimeConflict(uint32_t user_id, uint32_t start_week,
         ProcessRow(timetable, row, 1);
     }
 
-    if (section_id != 0)
+    // isNull  说明老师变了
+    if (section_id != 0 && !row.isNull() )
     {
         auto m_startWeek = row[0].get<uint32_t>();
         auto m_endWeek = row[1].get<uint32_t>();
@@ -313,7 +315,6 @@ bool DataValidator::isValidSectionId(uint32_t section_id)
 {
     try {
         auto sess = MysqlConnectionPool::Instance().GetSession();
-        auto sections = sess.getSchema("scut_sims");
         auto row = sess.sql(
             "SELECT 1 FROM sections sc "
             "JOIN semesters sm USING (semester_id) "
@@ -328,6 +329,17 @@ bool DataValidator::isValidSectionId(uint32_t section_id)
         LOG_DEBUG("Database Error: " << err.what());
         return false;
     }
+}
+
+bool DataValidator::isValidCollegeId(StringRef college)
+{
+    auto sess = MysqlConnectionPool::Instance().GetSession();
+
+    auto row = sess.sql(
+        "SELECT 1 FROM college WHERE name = ?;")
+		.bind(college).execute().fetchOne();
+    sess.close();
+	return !row.isNull();
 }
 
 // DataValidator 私有辅助方法实现

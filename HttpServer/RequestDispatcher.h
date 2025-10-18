@@ -26,8 +26,8 @@ public:
 
     struct DispatchResult
     {
-        bool matched{ false };
-        bool queued{ false };
+		bool matched{ false }; // 是否匹配到路由
+		bool queued{ false }; // 是否成功加入任务队列
     };
 
     RequestDispatcher(std::shared_ptr<HttpConnection> connection,

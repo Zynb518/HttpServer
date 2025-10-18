@@ -1,5 +1,7 @@
 ## 优化点
 
+ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
 ### **HTTP 缓存技术**
 
 对于⼀些具有重复性的 HTTP 请求，⽐如每次请求得到的数据都⼀样的，我们可以把这对 「请求-响应」的数据都缓存在本地

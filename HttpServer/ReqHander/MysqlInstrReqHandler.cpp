@@ -2,6 +2,7 @@
 #include "MysqlConnectionPool.h"
 #include "HttpConnection.h"
 #include "Tools.h"
+#include "Log.h"
 #include <boost/beast.hpp>
 
 namespace beast = boost::beast;
@@ -34,12 +35,12 @@ void MysqlInstrReqHandler::update_personal_info(std::shared_ptr<HttpConnection> 
 	Json::Value root;
 
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	sess.sql("CALL ins_update_personal_info(:id, :college, :email, :phone, :password)")
-		.bind("id", id)
-		.bind("college", college)
-		.bind("email", email)
-		.bind("phone", phone)
-		.bind("password", password)
+	sess.sql("CALL ins_update_personal_info(?, ?, ?, ?, ?)")
+		.bind(id)
+		.bind(college)
+		.bind(email)
+		.bind(phone)
+		.bind(password)
 		.execute();
 	sess.close();
 
@@ -52,8 +53,8 @@ void MysqlInstrReqHandler::update_personal_info(std::shared_ptr<HttpConnection> 
 void MysqlInstrReqHandler::get_teaching_sections(std::shared_ptr<HttpConnection> con, uint32_t id, const std::string& semester)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res = sess.sql("CALL ins_get_teaching_sections(:id , :semester)")
-		.bind("id", id).bind("semester", semester).execute();
+	mysqlx::RowResult res = sess.sql("CALL ins_get_teaching_sections(?, ?)")
+		.bind(id).bind(semester).execute();
 	sess.close();
 	
 	Json::Value root;
@@ -72,6 +73,7 @@ void MysqlInstrReqHandler::get_teaching_sections(std::shared_ptr<HttpConnection>
 		obj["credit"] = row[5].get<double>();
 		obj["startWeek"] = row[6].get<uint32_t>();
 		obj["endWeek"] = row[7].get<uint32_t>();
+		arr.append(obj);
 	}
 	root["result"] = true;
 	root["courseObj"] = arr;
@@ -94,14 +96,16 @@ void MysqlInstrReqHandler::get_section_students(std::shared_ptr<HttpConnection> 
 	root["credit"] = row[2].get<uint32_t>();
 	root["teacher"] = row[3].get<std::string>();
 	
+	LOG_INFO("Teacher OK");
+
 	if(results.nextResult())
 	{
 		while (row = results.fetchOne())
 		{
 			Json::Value obj;
-			obj["name"] = row[0].get<std::string>();
+			obj["student"] = row[0].get<std::string>();
 			obj["student_id"] = std::to_string(row[1].get<uint32_t>());
-			obj["grade"] = row[2].get<int>(); // 内部把null 转成 -1
+			obj["score"] = row[2].get<double>(); // 内部把null 转成 -1
 			arr.append(obj);
 		}
 	}
@@ -115,10 +119,10 @@ void MysqlInstrReqHandler::get_section_students(std::shared_ptr<HttpConnection> 
 void MysqlInstrReqHandler::post_grades(std::shared_ptr<HttpConnection> con, uint32_t student_id, uint32_t section_id, uint32_t score)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	sess.sql("CALL ins_post_grades(:student_id, :section_id, :score)")
-		.bind("student_id", student_id)
-		.bind("section_id", section_id)
-		.bind("score", score)
+	sess.sql("CALL ins_post_grade(?, ?, ?)")
+		.bind(student_id)
+		.bind(section_id)
+		.bind(score)
 		.execute();
 	sess.close();
 	

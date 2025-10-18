@@ -69,7 +69,8 @@ public:
         uint32_t end_week, StringRef schedule, uint32_t section_id = 0);
 
     bool isValidSectionId(uint32_t section_id);
-   
+    
+	bool isValidCollegeId(StringRef college);
 
 private:
     // 正则表达式模式声明

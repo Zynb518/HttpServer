@@ -22,7 +22,7 @@ void MysqlStReqHandler::get_personal_info(std::shared_ptr<HttpConnection> con, u
 	root["grade"]		= row[3].get<uint32_t>();
 	root["major"]		= row[4].get<std::string>();
 	root["college"]		= row[5].get<std::string>();
-	root["birthdate"]	= row[6].get<std::string>();
+	root["birthday"]	= row[6].get<std::string>();
 	root["email"]		= row[7].get<std::string>();
 	root["phone"]		= row[8].get<std::string>();
 
@@ -67,6 +67,7 @@ void MysqlStReqHandler::browse_courses(std::shared_ptr<HttpConnection> con, uint
 		auto str = row[4].get<std::string>(); // Ê±¼ä
 		Json::Value timeArr;
 		ParseTimeString(str, timeArr);
+		LOG_INFO("timeArr-" << timeArr.toStyledString());
 		obj["schedule"]		= timeArr;
 		obj["credit"]		= row[5].get<double>();
 		obj["semester"]		= row[6].get<std::string>();
@@ -147,7 +148,7 @@ void MysqlStReqHandler::get_schedule(std::shared_ptr<HttpConnection> con, uint32
 		arr.append(obj);
 	}
 	root["result"] = true;
-	root["scheduleObj"] = arr;
+	root["courseObj"] = arr;
 	
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
 	con->StartWrite();
@@ -156,7 +157,7 @@ void MysqlStReqHandler::get_schedule(std::shared_ptr<HttpConnection> con, uint32
 void MysqlStReqHandler::get_transcript(std::shared_ptr<HttpConnection> con, uint32_t id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res = sess.sql("CALL st_get_personal_info(?)").bind(id).execute();
+	mysqlx::RowResult res = sess.sql("CALL st_get_transcript(?)").bind(id).execute();
 	sess.close();
 	Json::Value root;
 	Json::Value arr;
@@ -165,11 +166,11 @@ void MysqlStReqHandler::get_transcript(std::shared_ptr<HttpConnection> con, uint
 	while (row = res.fetchOne())
 	{
 		Json::Value obj;
-		obj["term"]		= row[0].get<std::string>();
+		obj["semester"]		= row[0].get<std::string>();
 		obj["course"]	= row[1].get<std::string>();
-		obj["credit"]	= row[2].get<double>();
+		obj["credit"]	= row[2].get<uint32_t>();
 		obj["teacher"]	= row[3].get<std::string>();
-		obj["score"]	= row[4].get<uint32_t>();
+		obj["score"]	= row[4].get<double>();
 		arr.append(obj);
 	}
 	root["result"] = true;

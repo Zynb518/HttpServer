@@ -50,5 +50,7 @@ public:
 	void get_college_courses(std::shared_ptr<HttpConnection> con, uint32_t college_id) override;
 
 	void get_college_instructors(std::shared_ptr<HttpConnection> con, uint32_t college_id) override;
+
+	void get_college_majors(std::shared_ptr<HttpConnection> con, uint32_t college_id) override;
 };
 

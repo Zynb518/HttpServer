@@ -1,5 +1,7 @@
 #include "MysqlAdmReqHandler.h"
 #include "MysqlConnectionPool.h"
+#include "Log.h"
+
 #include "HttpConnection.h"
 #include <mysqlx/xdevapi.h>
 
@@ -25,6 +27,7 @@ void MysqlAdmReqHandler::get_students_info(std::shared_ptr<HttpConnection> con)
 		obj["password"] = row[6].get<std::string>();
 		arr.append(std::move(obj));
 	}
+	root["accountData"] = arr;
 	root["result"] = true;
 	
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
@@ -49,6 +52,7 @@ void MysqlAdmReqHandler::get_instructors_info(std::shared_ptr<HttpConnection> co
 		obj["password"] = row[3].get<std::string>();
 		arr.append(std::move(obj));
 	}
+	root["accountData"] = arr;
 	root["result"] = true;
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
 	con->StartWrite();
@@ -60,9 +64,9 @@ void MysqlAdmReqHandler::del_someone(std::shared_ptr<HttpConnection> con, const 
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	for(size_t i = 0; i < user_id.size(); ++i)
 	{
-		sess.sql("CALL adm_del_someone(:user_id, :role)")
-			.bind("user_id", user_id[i])
-			.bind("role", role[i])
+		sess.sql("CALL adm_del_someone(?, ?)")
+			.bind(user_id[i])
+			.bind(role[i])
 			.execute();
 	}
 	sess.close();
@@ -76,12 +80,12 @@ void MysqlAdmReqHandler::add_student(std::shared_ptr<HttpConnection> con, String
 	uint32_t grade, uint32_t major_id, uint32_t college_id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res =  sess.sql("CALL adm_add_student(:name, :gender, :grade, :major_id, :college_id)")
-		.bind("name", name)
-		.bind("gender", gender)
-		.bind("grade", grade)
-		.bind("major_id", major_id)
-		.bind("college_id", college_id)
+	mysqlx::RowResult res =  sess.sql("CALL adm_add_student(?,?,?,?,?)")
+		.bind(name)
+		.bind(gender)
+		.bind(grade)
+		.bind(major_id)
+		.bind(college_id)
 		.execute();
 	sess.close();
 	mysqlx::Row row = res.fetchOne();
@@ -97,9 +101,9 @@ void MysqlAdmReqHandler::add_student(std::shared_ptr<HttpConnection> con, String
 void MysqlAdmReqHandler::add_instructor(std::shared_ptr<HttpConnection> con, StringRef name, uint32_t college_id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res = sess.sql("CALL adm_add_instructor(:name, :college_id)")
-		.bind("name", name)
-		.bind("college_id", college_id)
+	mysqlx::RowResult res = sess.sql("CALL adm_add_instructor(?, ?)")
+		.bind(name)
+		.bind(college_id)
 		.execute();
 	sess.close();
 	mysqlx::Row row = res.fetchOne();
@@ -115,18 +119,20 @@ void MysqlAdmReqHandler::add_instructor(std::shared_ptr<HttpConnection> con, Str
 void MysqlAdmReqHandler::get_sections(std::shared_ptr<HttpConnection> con, StringRef semester)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res = sess.sql("CALL adm_get_sections(:semester)")
-		.bind("semester", semester)
+	mysqlx::RowResult res = sess.sql("CALL adm_get_sections(?)")
+		.bind(semester)
 		.execute();
 	sess.close();
 	mysqlx::Row row;
 	Json::Value root;
 	Json::Value arr;
+
 	while(row = res.fetchOne())
 	{
 		Json::Value obj;
 		obj["section_id"] = std::to_string(row[0].get<uint32_t>());
 		obj["course_id"] = std::to_string(row[1].get<uint32_t>());
+		LOG_INFO("OK1");
 		obj["course"] = row[2].get<std::string>();
 		obj["credit"] = row[3].get<double>();
 		obj["college"] = row[4].get<std::string>();
@@ -138,8 +144,10 @@ void MysqlAdmReqHandler::get_sections(std::shared_ptr<HttpConnection> con, Strin
 		obj["schedule"] = timeArr;
 		obj["choose_num"] = row[8].get<uint32_t>();
 		obj["max_capacity"] = row[9].get<uint32_t>();
+		LOG_INFO("OK2");
 		obj["startWeek"] = row[10].get<uint32_t>();
 		obj["endWeek"] = row[11].get<uint32_t>();
+		LOG_INFO("OK3");
 		obj["location"] = row[12].get<std::string>();
 		arr.append(std::move(obj));
 	}
@@ -155,8 +163,8 @@ void MysqlAdmReqHandler::del_section(std::shared_ptr<HttpConnection> con, const 
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
 	for(auto id : section_id)
 	{
-		sess.sql("CALL adm_del_section(:section_id)")
-			.bind("section_id", id)
+		sess.sql("CALL adm_del_section(?)")
+			.bind(id)
 			.execute();
 	}
 	sess.close();
@@ -169,18 +177,18 @@ void MysqlAdmReqHandler::del_section(std::shared_ptr<HttpConnection> con, const 
 void MysqlAdmReqHandler::add_section_new(std::shared_ptr<HttpConnection> con, uint32_t college_id, StringRef course_name, uint32_t credit, StringRef type, StringRef semester, uint32_t instructor_id, StringRef time_slot, uint32_t max_capacity, uint32_t start_week, uint32_t end_week, StringRef location)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res = sess.sql("CALL adm_add_section_new(:college_id, :course_name, :credit, :type, :semester, :instructor_id, :time_slot, :max_capacity, :start_week, :end_week, :location)")
-		.bind("college_id", college_id)
-		.bind("course_name", course_name)
-		.bind("credit", credit)
-		.bind("type", type)
-		.bind("semester", semester)
-		.bind("instructor_id", instructor_id)
-		.bind("time_slot", time_slot)
-		.bind("max_capacity", max_capacity)
-		.bind("start_week", start_week)
-		.bind("end_week", end_week)
-		.bind("location", location)
+	mysqlx::RowResult res = sess.sql("CALL adm_add_section_new(?,?,?,?,?,?,?,?,?,?,?)")
+		.bind(college_id)
+		.bind(course_name)
+		.bind(credit)
+		.bind(type)
+		.bind(semester)
+		.bind(instructor_id)
+		.bind(time_slot)
+		.bind(max_capacity)
+		.bind(start_week)
+		.bind(end_week)
+		.bind(location)
 		.execute();
 	sess.close();
 	mysqlx::Row row = res.fetchOne();
@@ -195,16 +203,15 @@ void MysqlAdmReqHandler::add_section_new(std::shared_ptr<HttpConnection> con, ui
 void MysqlAdmReqHandler::add_section_old(std::shared_ptr<HttpConnection> con, uint32_t course_id, StringRef semester, uint32_t instructor_id, StringRef time_slot, uint32_t max_capacity, uint32_t start_week, uint32_t end_week, StringRef location)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res = sess.sql("CALL adm_add_section_old(:course_id, :semester,"
-			" :instructor_id, :time_slot, :max_capacity, :start_week, :end_week, :location)")
-		.bind("course_id", course_id)
-		.bind("semester", semester)
-		.bind("instructor_id", instructor_id)
-		.bind("time_slot", time_slot)
-		.bind("max_capacity", max_capacity)
-		.bind("start_week", start_week)
-		.bind("end_week", end_week)
-		.bind("location", location)
+	mysqlx::RowResult res = sess.sql("CALL adm_add_section_old(?,?,?,?,?,?,?,?)")
+		.bind(course_id)
+		.bind(semester)
+		.bind(instructor_id)
+		.bind(time_slot)
+		.bind(max_capacity)
+		.bind(start_week)
+		.bind(end_week)
+		.bind(location)
 		.execute();
 	sess.close();
 	mysqlx::Row row = res.fetchOne();
@@ -218,13 +225,13 @@ void MysqlAdmReqHandler::add_section_old(std::shared_ptr<HttpConnection> con, ui
 void MysqlAdmReqHandler::modify_section(std::shared_ptr<HttpConnection> con, uint32_t section_id, uint32_t instructor_id, StringRef time_slot, uint32_t start_week, uint32_t end_week, StringRef location)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	sess.sql("CALL adm_modify_section(:section_id, :instructor_id, :time_slot, :start_week, :end_week, :location)")
-		.bind("section_id", section_id)
-		.bind("instructor_id", instructor_id)
-		.bind("time_slot", time_slot)
-		.bind("start_week", start_week)
-		.bind("end_week", end_week)
-		.bind("location", location)
+	sess.sql("CALL adm_modify_section(?,?,?,?,?,?)")
+		.bind(section_id)
+		.bind(instructor_id)
+		.bind(time_slot)
+		.bind(start_week)
+		.bind(end_week)
+		.bind(location)
 		.execute();
 	sess.close();
 	Json::Value root;
@@ -236,17 +243,21 @@ void MysqlAdmReqHandler::modify_section(std::shared_ptr<HttpConnection> con, uin
 void MysqlAdmReqHandler::view_grade_statistics(std::shared_ptr<HttpConnection> con, uint32_t section_id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res = sess.sql("CALL adm_view_grade_statistics(:section_id)")
-		.bind("section_id", section_id)
+	mysqlx::RowResult res = sess.sql("CALL adm_view_grade_statistics(?)")
+		.bind(section_id)
 		.execute();
 	sess.close();
-	mysqlx::Row row = res.fetchOne();
 	Json::Value root;
 	root["result"] = true;
 	Json::Value statistics;
-	for(size_t i = 0; i < 5; ++i)
-		statistics.append(row[i].get<uint32_t>());
+	LOG_INFO("BEFORE FOR");
+	for (auto row : res)
+	{
+		statistics.append(row[1].get<size_t>());
+	}
+		
 	root["statistics"] = statistics;
+
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
 	con->StartWrite();
 }
@@ -254,9 +265,9 @@ void MysqlAdmReqHandler::view_grade_statistics(std::shared_ptr<HttpConnection> c
 void MysqlAdmReqHandler::get_student_grades(std::shared_ptr<HttpConnection> con, uint32_t student_id, StringRef semester)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res = sess.sql("CALL adm_get_student_grades(:student_id, :semester)")
-		.bind("student_id", student_id)
-		.bind("semester", semester)
+	mysqlx::RowResult res = sess.sql("CALL adm_get_student_grades(?,?)")
+		.bind(student_id)
+		.bind(semester)
 		.execute();
 	sess.close();
 	Json::Value root;
@@ -278,9 +289,9 @@ void MysqlAdmReqHandler::get_student_grades(std::shared_ptr<HttpConnection> con,
 void MysqlAdmReqHandler::get_instructor_grades(std::shared_ptr<HttpConnection> con, uint32_t instructor_id, StringRef semester)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res = sess.sql("CALL adm_get_instructor_grades(:instructor_id, :semester)")
-		.bind("instructor_id", instructor_id)
-		.bind("semester", semester)
+	mysqlx::RowResult res = sess.sql("CALL adm_get_instructor_grades(?,?)")
+		.bind(instructor_id)
+		.bind(semester)
 		.execute();
 	sess.close();
 	Json::Value root;
@@ -323,8 +334,8 @@ void MysqlAdmReqHandler::get_colleges(std::shared_ptr<HttpConnection> con)
 void MysqlAdmReqHandler::get_college_courses(std::shared_ptr<HttpConnection> con, uint32_t college_id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res = sess.sql("CALL adm_get_college_courses(:college_id)")
-		.bind("college_id", college_id)
+	mysqlx::RowResult res = sess.sql("CALL adm_get_college_courses(?)")
+		.bind(college_id)
 		.execute();
 	sess.close();
 	Json::Value root;
@@ -348,8 +359,8 @@ void MysqlAdmReqHandler::get_college_courses(std::shared_ptr<HttpConnection> con
 void MysqlAdmReqHandler::get_college_instructors(std::shared_ptr<HttpConnection> con, uint32_t college_id)
 {
 	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
-	mysqlx::RowResult res = sess.sql("CALL adm_get_college_instructors(:college_id)")
-		.bind("college_id", college_id)
+	mysqlx::RowResult res = sess.sql("CALL adm_get_college_instructors(?)")
+		.bind(college_id)
 		.execute();
 	sess.close();
 	Json::Value root;
@@ -364,6 +375,29 @@ void MysqlAdmReqHandler::get_college_instructors(std::shared_ptr<HttpConnection>
 	}
 	root["result"] = true;
 	root["instructorInfo"] = arr;
+	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
+	con->StartWrite();
+}
+
+void MysqlAdmReqHandler::get_college_majors(std::shared_ptr<HttpConnection> con, uint32_t college_id)
+{
+	mysqlx::Session sess = MysqlConnectionPool::Instance().GetSession();
+	mysqlx::RowResult res = sess.sql("CALL adm_get_college_majors(?)")
+		.bind(college_id)
+		.execute();
+
+	Json::Value root;
+	Json::Value arr;
+	mysqlx::Row row;
+	while (row = res.fetchOne())
+	{
+		Json::Value obj;
+		obj["major_id"] = std::to_string(row[0].get<uint32_t>());
+		obj["major_name"] = row[1].get<std::string>();
+		arr.append(std::move(obj));
+	}
+	root["result"] = true;
+	root["majorInfo"] = arr;
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
 	con->StartWrite();
 }
