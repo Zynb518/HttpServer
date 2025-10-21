@@ -37,7 +37,7 @@ public:
 
     void SetUnProcessableEntity(Json::Value& message) noexcept;
     void SetUnProcessableEntity(const std::string& reason) noexcept;
-    void SetBadRequest() noexcept;
+    void SetBadRequest(const std::string& reason = "") noexcept;
 
 private:
     void StartTimer();

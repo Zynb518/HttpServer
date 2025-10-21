@@ -38,7 +38,7 @@ public:
     }
 
     inline bool isValidGrade(uint32_t grade) {
-        return grade >= 2025 && grade <= 2100;
+        return grade >= 2023 && grade <= 2100;
     }
 
     inline bool isValidCapacity(uint32_t capacity) 

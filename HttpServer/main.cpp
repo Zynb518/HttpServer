@@ -23,7 +23,13 @@ int main()
 #ifdef _WIN32
         system("chcp 65001 > nul");
 #endif
-        std::cout << std::isdigit('8') << std::endl;
+        static const std::string autumn = GetUTF8ForDatabase(L"秋");
+        for(char c : autumn) {
+            std::cout << static_cast<int>(static_cast<unsigned char>(c)) << " ";
+		}
+
+        // LOG_INFO(autumn[0] << " " << autumn[1] << " " << autumn[2]);
+
 
         boost::asio::io_context ioc;
         HttpServer server(ioc, 10086);

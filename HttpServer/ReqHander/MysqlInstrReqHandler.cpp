@@ -16,7 +16,7 @@ void MysqlInstrReqHandler::get_personal_info(std::shared_ptr<HttpConnection> con
 
 	Json::Value root;
 	root["id"]		= std::to_string(row[0].get<uint32_t>());
-	root["user_id"] = std::to_string(row[0].get<uint32_t>());
+	root["userId"] = std::to_string(row[0].get<uint32_t>());
 	root["name"]	= row[1].get<std::string>();
 	root["college"] = row[2].get<std::string>();
 	root["email"]	= row[3].get<std::string>();

@@ -45,7 +45,8 @@ beast::http::response<beast::http::dynamic_body>& HttpConnection::GetResponse() 
 
 void HttpConnection::ReadLogin()
 {
-    LOG_INFO("Start ReadLogin");
+    LOG_INFO("Start ReadLogin" << _uuid);
+
     _request.clear();
     _request.body().clear();
     _response.body().clear();
@@ -58,13 +59,15 @@ void HttpConnection::ReadLogin()
                 LOG_INFO("... HandleLogin, target: " << _request.target());
                 if (!HandleLogin())
                 {
-                    SetUnProcessableEntity("Login-Failure");
-                    ReadLogin();
+                    SetBadRequest("Login Failure, Close Connection");
+                    CloseConnection();
+                    // ReadLogin();
                 }
             }
             else
             {
                 LOG_INFO("ReadLogin async_read error: " << ec.message());
+                SetBadRequest(ec.message());
                 CloseConnection();
             }
         });
@@ -168,7 +171,7 @@ bool HttpConnection::HandleLogin()
     catch (const std::exception& e)
     {
         LOG_ERROR("HandleLogin exception: " << e.what());
-        SetBadRequest();
+        SetBadRequest(e.what());
         CloseConnection();
         // 这里得return true ，使得回调链中断
         return true;
@@ -187,12 +190,13 @@ bool HttpConnection::ParseUserData(const std::string& body, Json::Value& out)
     return true;
 }
 
-void HttpConnection::SetBadRequest() noexcept
+void HttpConnection::SetBadRequest(const std::string& reason) noexcept
 {
     _response.result(beast::http::status::bad_request);
     _response.set(beast::http::field::connection, "close");
     Json::Value send;
     send["result"] = false;
+	send["reason"] = reason;
     beast::ostream(_response.body()) << Json::writeString(_writerBuilder, send);
     _response.prepare_payload();
     WriteBadResponse();
@@ -204,6 +208,7 @@ void HttpConnection::SetUnProcessableEntity(Json::Value& message) noexcept
     beast::ostream(_response.body()) << Json::writeString(_writerBuilder, message);
     _response.prepare_payload();
     WriteBadResponse();
+    StartRead();
 }
 
 void HttpConnection::SetUnProcessableEntity(const std::string& reason) noexcept
@@ -216,6 +221,7 @@ void HttpConnection::SetUnProcessableEntity(const std::string& reason) noexcept
     beast::ostream(_response.body()) << Json::writeString(_writerBuilder, root);
     _response.prepare_payload();
     WriteBadResponse();
+	StartRead();
 }
 
 void HttpConnection::WriteBadResponse() noexcept
@@ -231,7 +237,7 @@ void HttpConnection::WriteBadResponse() noexcept
 
 void HttpConnection::StartRead()
 {
-    LOG_INFO("StartRead");
+    LOG_INFO("StartRead uuid- " << _uuid);
     _request.clear();
     _request.body().clear();
     _response.body().clear();
@@ -250,6 +256,7 @@ void HttpConnection::StartRead()
                 LOG_INFO("HttpConnection read error: " << ec.message());
                 self->CloseConnection();
             }
+
         });
 }
 
@@ -301,6 +308,7 @@ void HttpConnection::HandleRouting()
         // 已匹配但未入队 → 说明调度器内部因为校验失败等原因已经写回错误响应，直接返回即可。
         return;
     }
+
 
     // 正常命中并入队 → 函数结尾注明任务已入队，等待逻辑线程处理。
 }

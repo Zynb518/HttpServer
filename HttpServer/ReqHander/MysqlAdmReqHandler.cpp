@@ -132,23 +132,21 @@ void MysqlAdmReqHandler::get_sections(std::shared_ptr<HttpConnection> con, Strin
 		Json::Value obj;
 		obj["section_id"] = std::to_string(row[0].get<uint32_t>());
 		obj["course_id"] = std::to_string(row[1].get<uint32_t>());
-		LOG_INFO("OK1");
 		obj["course"] = row[2].get<std::string>();
 		obj["credit"] = row[3].get<double>();
-		obj["college"] = row[4].get<std::string>();
-		obj["type"] = row[5].get<std::string>();
-		obj["teacher"] = row[6].get<std::string>();
+		obj["college_id"] = std::to_string(row[4].get<uint32_t>());
+		obj["college"] = row[5].get<std::string>();
+		obj["type"] = row[6].get<std::string>();
+		obj["teacher"] = row[7].get<std::string>();
 		Json::Value timeArr;
-		auto str = row[7].get<std::string>();
+		auto str = row[8].get<std::string>();
 		ParseTimeString(str, timeArr);
 		obj["schedule"] = timeArr;
-		obj["choose_num"] = row[8].get<uint32_t>();
-		obj["max_capacity"] = row[9].get<uint32_t>();
-		LOG_INFO("OK2");
-		obj["startWeek"] = row[10].get<uint32_t>();
-		obj["endWeek"] = row[11].get<uint32_t>();
-		LOG_INFO("OK3");
-		obj["location"] = row[12].get<std::string>();
+		obj["choose_num"] = row[9].get<uint32_t>();
+		obj["max_capacity"] = row[10].get<uint32_t>();
+		obj["startWeek"] = row[11].get<uint32_t>();
+		obj["endWeek"] = row[12].get<uint32_t>();
+		obj["location"] = row[13].get<std::string>();
 		arr.append(std::move(obj));
 	}
 	root["result"] = true;
@@ -374,7 +372,7 @@ void MysqlAdmReqHandler::get_college_instructors(std::shared_ptr<HttpConnection>
 		arr.append(std::move(obj));
 	}
 	root["result"] = true;
-	root["instructorInfo"] = arr;
+	root["teacherInfo"] = arr;
 	beast::ostream(con->GetResponse().body()) << Json::writeString(_writer, root);
 	con->StartWrite();
 }

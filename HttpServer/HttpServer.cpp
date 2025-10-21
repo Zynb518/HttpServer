@@ -9,9 +9,9 @@
 // in_addr_any ¶Ë¿Ú10086
 HttpServer::HttpServer(boost::asio::io_context& ioc, uint16_t port) noexcept
 	:_ioc(ioc),
-	_acceptor(ioc, tcp::endpoint(boost::asio::ip::tcp::v4(), port))
+	_acceptor(ioc, tcp::endpoint(boost::asio::ip::make_address("10.195.144.254"), port))
 {
-	// boost::asio::ip::make_address("");
+	// boost::asio::ip::make_address("10.195.144.254");
 	LOG_INFO("HttpServer start listen on port " << port);
 	_acceptor.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
 	_acceptor.listen();
@@ -41,7 +41,7 @@ void HttpServer::StartAccept()
 			{
 				LOG_INFO("aysnc_accept error is " << ec.what());
 			}
-			std::this_thread::sleep_for(std::chrono::seconds(10));
+			// std::this_thread::sleep_for(std::chrono::seconds(10));
 			StartAccept();
 		});
 }

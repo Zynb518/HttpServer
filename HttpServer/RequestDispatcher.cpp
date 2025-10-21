@@ -130,11 +130,12 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveStudentGet(std::string_vie
     constexpr std::string_view schedulePrefix = "/api/student_tableCheck/ask?semester=";
     if (StartsWith(target, schedulePrefix))
     {
-        std::string semester(target.substr(schedulePrefix.size()));
+        auto semester = UrlDecode(target.substr(schedulePrefix.size()));
         LOG_INFO("tableCheck semester = " << semester);
         if (!_dataValidator.isValidSemester(semester))
         {
             ReportInvalid("Semester Format Wrong!");
+            // ReportInvalid(semester);
             return Resolved{ true, std::nullopt };
         }
 
@@ -268,13 +269,12 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveInstructorGet(std::string_
     constexpr std::string_view schedulePrefix = "/api/teacher_tableCheck/ask?semester=";
     if (StartsWith(target, schedulePrefix))
     {
-        std::string semester(target.substr(schedulePrefix.size()));
+        auto semester = UrlDecode( target.substr(schedulePrefix.size()) );
         if (!_dataValidator.isValidSemester(semester))
         {
             ReportInvalid("Semester Format Wrong!");
             return Resolved{ true, std::nullopt };
         }
-
 
 
         return Resolved{ true, MakeTask([
@@ -443,7 +443,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminGet(std::string_view 
     constexpr std::string_view allCoursePrefix = "/api/admin_courseManage/getAllCourse?semester=";
     if (StartsWith(target, allCoursePrefix))
     {
-        std::string semester(target.substr(allCoursePrefix.size()));
+        auto semester = UrlDecode(target.substr(allCoursePrefix.size()));
         if (!_dataValidator.isValidSemester(semester))
         {
             ReportInvalid("Semester Format Wrong!");
@@ -489,7 +489,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminGet(std::string_view 
         pos_id += sizeof("student_id=") - 1;
         std::string_view sidView(target.substr(pos_id, pos_sem - pos_id));
         pos_sem += sizeof("&semester=") - 1;
-        std::string semester(target.substr(pos_sem));
+        auto semester = UrlDecode(target.substr(pos_sem));
         uint32_t student_id = static_cast<uint32_t>(std::stoul(std::string(sidView)));
 
         if (!_dataValidator.isValidSemester(semester))
@@ -523,7 +523,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminGet(std::string_view 
         pos_id += sizeof("teacher_id=") - 1;
         std::string_view tidView(target.substr(pos_id, pos_sem - pos_id));
         pos_sem += sizeof("&semester=") - 1;
-        std::string semester(target.substr(pos_sem));
+        auto semester = UrlDecode(target.substr(pos_sem));
         uint32_t teacher_id = static_cast<uint32_t>(std::stoul(std::string(tidView)));
 
         if (!_dataValidator.isValidSemester(semester))
@@ -674,7 +674,7 @@ RequestDispatcher::Resolved RequestDispatcher::ResolveAdminPost(std::string_view
     {
         auto& courseData = payload["courseData"];
 
-        auto semester = courseData["semester"].asString();
+        auto semester = UrlDecode( courseData["semester"].asString() );
         auto teacher_id = static_cast<uint32_t>( stoul(courseData["teacher_id"].asString()) );
         auto& schedule = courseData["schedule"];
         auto max_capacity = courseData["max_capacity"].asUInt();

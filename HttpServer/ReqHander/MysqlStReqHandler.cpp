@@ -16,7 +16,7 @@ void MysqlStReqHandler::get_personal_info(std::shared_ptr<HttpConnection> con, u
 	// 有没有可能为空
 	Json::Value root;
 	root["id"]			= std::to_string(row[0].get<uint32_t>());
-	root["user_id"]		= std::to_string(row[0].get<uint32_t>());
+	root["userId"]		= std::to_string(row[0].get<uint32_t>());
 	root["name"]		= row[1].get<std::string>();
 	root["gender"]		= row[2].get<std::string>();
 	root["grade"]		= row[3].get<uint32_t>();

@@ -1,0 +1,81 @@
+diff --git a/HttpConnection.h b/HttpConnection.h
+index 3b7f157..8cb4cd9 100644
+--- a/HttpConnection.h
++++ b/HttpConnection.h
+@@
+     void HandleRouting();
+ 
++    void HandleReadFailure(const char* stage, beast::error_code ec) noexcept;
++
+     void CloseConnection() noexcept;
+ 
+ private:
+diff --git a/HttpConnection.cpp b/HttpConnection.cpp
+index c5fb2ac..ff8b9fb 100644
+--- a/HttpConnection.cpp
++++ b/HttpConnection.cpp
+@@
+-    beast::http::async_read(_socket, _buffer, _request,
+-        [this, self = shared_from_this()](beast::error_code ec, std::size_t bytes_transferred) {
++    beast::http::async_read(_socket, _buffer, _request,
++        [this, self = shared_from_this()](beast::error_code ec, std::size_t bytes_transferred) {
+             boost::ignore_unused(bytes_transferred);
+             if (!ec)
+             {
+                 LOG_INFO("... HandleLogin, target: " << _request.target());
+                 if (!HandleLogin())
+                 {
+                     SetBadRequest();
+                     CloseConnection();
+                     // ReadLogin();
+                 }
+             }
+             else
+             {
+-                LOG_INFO("ReadLogin async_read error: " << ec.message());
+-                CloseConnection();
++                self->HandleReadFailure("ReadLogin", ec);
+             }
+         });
+ }
+@@
+     beast::http::async_read(_socket, _buffer, _request,
+-        [self = shared_from_this()](beast::error_code ec, std::size_t bytes_transferred) {
++        [self = shared_from_this()](beast::error_code ec, std::size_t bytes_transferred) {
+             boost::ignore_unused(bytes_transferred);
+             if (!ec)
+             {
+                 LOG_INFO("Incoming target: " << self->_request.target());
+                 LOG_INFO("Incoming BODY: \n" << beast::buffers_to_string(self->_request.body().data()));
+                 self->HandleRead();
+             }
+             else
+             {
+-                LOG_INFO("HttpConnection read error: " << ec.message());
+-                self->CloseConnection();
++                self->HandleReadFailure("StartRead", ec);
+             }
+ 
+         });
+ }
+ 
++void HttpConnection::HandleReadFailure(const char* stage, beast::error_code ec) noexcept
++{
++    if (ec == boost::asio::error::operation_aborted)
++    {
++        LOG_INFO(stage << " cancelled: " << ec.message());
++        return;
++    }
++
++    if (ec == beast::http::error::end_of_stream
++        || ec == boost::asio::error::eof
++        || ec == boost::asio::error::connection_reset)
++    {
++        LOG_INFO(stage << " peer closed connection (" << _uuid << "): " << ec.message());
++        CloseConnection();
++        return;
++    }
++
++    LOG_ERROR(stage << " unexpected read error: " << ec.message());
++    CloseConnection();
++}
