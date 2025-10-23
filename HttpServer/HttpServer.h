@@ -19,9 +19,10 @@ public:
 	~HttpServer();
 private:
 	void StartAccept(); // lambda »Øµ÷ HandleAccept
-	
+	void StartTimer();
 private:
 	boost::asio::io_context& _ioc;
+	boost::asio::steady_timer _timer;
 	tcp::acceptor _acceptor;
 	std::unordered_map<std::string_view, std::shared_ptr<HttpConnection> > _mapping;
 	

@@ -28,9 +28,6 @@ int main()
             std::cout << static_cast<int>(static_cast<unsigned char>(c)) << " ";
 		}
 
-        // LOG_INFO(autumn[0] << " " << autumn[1] << " " << autumn[2]);
-
-
         boost::asio::io_context ioc;
         HttpServer server(ioc, 10086);
         ioc.run();

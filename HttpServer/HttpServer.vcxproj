@@ -148,6 +148,7 @@
     <ClCompile Include="MysqlConnectionPool.cpp" />
     <ClCompile Include="ReqHander\StReqHandler.cpp" />
     <ClCompile Include="ReqHander\MysqlStReqHandler.cpp" />
+    <ClCompile Include="SessionManager.cpp" />
     <ClCompile Include="Tools.cpp" />
     <ClCompile Include="RequestDispatcher.cpp" />
   </ItemGroup>
@@ -167,6 +168,7 @@
     <ClInclude Include="ReqHander\StReqHandler.h" />
     <ClInclude Include="ReqHander\MysqlStReqHandler.h" />
     <ClInclude Include="RequestDispatcher.h" />
+    <ClInclude Include="SessionManager.h" />
     <ClInclude Include="Tools.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

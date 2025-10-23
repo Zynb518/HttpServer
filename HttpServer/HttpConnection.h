@@ -4,14 +4,19 @@
 #include <boost/beast.hpp>
 #include <json/json.h>
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <optional>
+#include <filesystem>
 
+#include "SessionManager.h"
 #include "DataValidator.h"
 #include "MysqlStReqHandler.h"
 #include "MysqlInstrReqHandler.h"
 #include "MysqlAdmReqHandler.h"
+
 
 namespace beast = boost::beast;
 
@@ -24,34 +29,41 @@ class HttpConnection : public std::enable_shared_from_this<HttpConnection>
 public:
     HttpConnection(boost::asio::io_context& ioc, HttpServer& server) noexcept;
 
-    tcp::socket& GetSocket() noexcept;
-    std::string_view GetUuid() const noexcept;
-    beast::http::response<beast::http::dynamic_body>& GetResponse() noexcept;
+    inline tcp::socket& GetSocket() noexcept { return _socket; }
+	inline std::string_view GetUuid() const noexcept { return _uuid; }
+	inline beast::http::response<beast::http::dynamic_body>& GetResponse() noexcept { return _response; }
 
-    uint32_t GetUserId() const noexcept { return _user_id; }
-    std::string& GetRole() noexcept { return _role; }
-    std::string& GetPassword() noexcept { return _password; }
+    inline uint32_t GetUserId() const noexcept { return _user_id; }
+    inline std::string& GetRole() noexcept { return _role; }
+    inline std::string& GetPassword() noexcept { return _password; }
 
-    void ReadLogin();
+    void StartRead();
     void StartWrite();
 
     void SetUnProcessableEntity(Json::Value& message) noexcept;
     void SetUnProcessableEntity(const std::string& reason) noexcept;
+    void SetUnauthorized(const std::string& reason) noexcept;
     void SetBadRequest(const std::string& reason = "") noexcept;
 
 private:
     void StartTimer();
     void ResetTimer();
 
-    bool HandleLogin();
+    void HandleLogin();
     bool ParseUserData(const std::string& body, Json::Value& out);
     void WriteBadResponse() noexcept;
 
-    void StartRead();
     void HandleRead();
+    void ServeStatic(std::string_view target);   // ¡û ÐÂÔö
+    std::string SantisizePath(std::string_view path);
     void HandleRouting();
 
     void CloseConnection() noexcept;
+
+private:
+    bool AuthenticateRequest();
+    std::optional<std::string> ExtractSessionId() const;
+    std::string _sessionId;
 
 private:
     tcp::socket _socket;
@@ -69,6 +81,7 @@ private:
     uint32_t _user_id{ 0 };
     std::string _password;
     std::string _role;
+    std::string _docRoot;
 
     static DataValidator _dataValidator;
     MysqlStReqHandler _studentHandler;

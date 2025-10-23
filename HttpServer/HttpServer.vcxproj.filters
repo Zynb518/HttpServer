@@ -60,6 +60,9 @@
     <ClCompile Include="RequestDispatcher.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="SessionManager.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="HttpServer.h">
@@ -108,6 +111,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="RequestDispatcher.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="SessionManager.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
